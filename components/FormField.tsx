@@ -10,7 +10,7 @@ interface FormFieldProps {
   placeholder?: string;
   required?: boolean;
   as?: 'input' | 'textarea' | 'select';
-  options?: string[];
+  options?: (string | { value: string; label: string })[];
   rows?: number;
 }
 
@@ -44,9 +44,12 @@ const FormField: React.FC<FormFieldProps> = ({
       case 'select':
         return (
           <select {...commonProps}>
-            {options && options.map(option => (
-              <option key={option} value={option}>{option}</option>
-            ))}
+            {options && options.map(option => {
+              if (typeof option === 'string') {
+                return <option key={option} value={option}>{option}</option>;
+              }
+              return <option key={option.value} value={option.value}>{option.label}</option>;
+            })}
           </select>
         );
       default:

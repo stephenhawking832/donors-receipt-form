@@ -14,3 +14,5 @@ export interface OrgData {
   address: string;
   ein: string;
 }
+
+export type Translations = { [key: string]: string };
