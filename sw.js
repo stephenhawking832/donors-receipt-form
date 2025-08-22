@@ -1,4 +1,4 @@
-const CACHE_NAME = 'donation-receipt-cache-v2';
+const CACHE_NAME = 'donation-receipt-cache-v4';
 const PRECACHE_URLS = [
     '/',
     '/index.html',
@@ -8,7 +8,7 @@ const PRECACHE_URLS = [
     '/components/FormField.tsx',
     '/components/ReceiptPreview.tsx',
     '/components/ReceiptHistory.tsx',
-    '/config.json'
+    '/components/Settings.tsx'
 ];
 
 self.addEventListener('install', event => {
@@ -40,6 +40,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  // Use a cache-first strategy for all assets for performance
   event.respondWith(
     caches.match(event.request)
       .then(response => {
@@ -56,15 +57,14 @@ self.addEventListener('fetch', event => {
               return networkResponse;
             }
             
+            // We only cache external GET requests that aren't already precached
             const responseToCache = networkResponse.clone();
-
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                // We only cache external GET requests, not local files again.
-                if (event.request.method === 'GET' && (event.request.url.startsWith('https://') || event.request.url.endsWith('.json'))) {
-                    cache.put(event.request, responseToCache);
-                }
-              });
+            if (event.request.method === 'GET' && (event.request.url.startsWith('https://'))) {
+                caches.open(CACHE_NAME)
+                  .then(cache => {
+                      cache.put(event.request, responseToCache);
+                  });
+            }
 
             return networkResponse;
           }

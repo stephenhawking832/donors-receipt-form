@@ -5,6 +5,7 @@ import { DonationData, OrgData } from './types';
 import FormField from './components/FormField';
 import ReceiptPreview from './components/ReceiptPreview';
 import ReceiptHistory from './components/ReceiptHistory';
+import Settings from './components/Settings';
 
 // Helper function to get the next available receipt ID.
 const getNextReceiptId = (): string => {
@@ -34,27 +35,23 @@ const App: React.FC = () => {
   const [orgData, setOrgData] = useState<OrgData>(defaultOrgData);
   const [isLoading, setIsLoading] = useState(false);
   const [savedReceipts, setSavedReceipts] = useState<DonationData[]>([]);
-  const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
+  const [activeTab, setActiveTab] = useState<'create' | 'history' | 'settings'>('create');
 
   useEffect(() => {
     // Load config and saved receipts from localStorage on initial render
-    const loadConfig = async () => {
+    const loadData = () => {
         try {
-            const response = await fetch('/config.json');
-            if (!response.ok) throw new Error('Network response was not ok');
-            const config = await response.json();
-            setOrgData({
-                name: config.orgName,
-                address: config.orgAddress,
-                ein: config.orgEin
-            });
+            const storedOrgData = localStorage.getItem('orgData');
+            if (storedOrgData) {
+                setOrgData(JSON.parse(storedOrgData));
+            } else {
+                setOrgData(defaultOrgData); // Fallback to default if nothing in storage
+            }
         } catch (error) {
-            console.error("Failed to load config.json, using default data.", error);
-            setOrgData(defaultOrgData); // Fallback to default
+            console.error("Failed to parse org data from localStorage", error);
+            setOrgData(defaultOrgData);
         }
-    };
     
-    const loadReceipts = () => {
         try {
           const storedReceipts = localStorage.getItem('donationReceipts');
           if (storedReceipts) {
@@ -65,9 +62,13 @@ const App: React.FC = () => {
         }
     };
     
-    loadConfig();
-    loadReceipts();
+    loadData();
   }, []);
+
+  const handleOrgDataChange = (newOrgData: OrgData) => {
+    setOrgData(newOrgData);
+    localStorage.setItem('orgData', JSON.stringify(newOrgData));
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -156,7 +157,7 @@ const App: React.FC = () => {
     // After re-download, the form state is already restored by the finally block in generatePdf
   };
 
-  const TabButton: React.FC<{tabId: 'create' | 'history', children: React.ReactNode}> = ({ tabId, children }) => (
+  const TabButton: React.FC<{tabId: 'create' | 'history' | 'settings', children: React.ReactNode}> = ({ tabId, children }) => (
     <button
       onClick={() => setActiveTab(tabId)}
       className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
@@ -187,6 +188,7 @@ const App: React.FC = () => {
           <div className="flex space-x-2 bg-slate-100 p-1 rounded-lg">
             <TabButton tabId="create">Create Receipt</TabButton>
             <TabButton tabId="history">Receipt History</TabButton>
+            <TabButton tabId="settings">Settings</TabButton>
           </div>
         </div>
         
@@ -239,6 +241,10 @@ const App: React.FC = () => {
 
         {activeTab === 'history' && (
           <ReceiptHistory receipts={savedReceipts} onRedownload={handleRedownload} />
+        )}
+
+        {activeTab === 'settings' && (
+          <Settings orgData={orgData} onOrgDataChange={handleOrgDataChange} />
         )}
 
       </div>
