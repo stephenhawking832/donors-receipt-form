@@ -1,9 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { DonationData } from './types';
 import FormField from './components/FormField';
 import ReceiptPreview from './components/ReceiptPreview';
+
+// Helper function to get the next available receipt ID.
+// It reads the last used number from localStorage, increments it, and returns the new formatted ID.
+const getNextReceiptId = (): string => {
+  // Get the last saved counter, default to 1000 if not found.
+  const lastReceiptNumber = parseInt(localStorage.getItem('donationReceiptCounter') || '1000', 10);
+  const nextReceiptNumber = lastReceiptNumber + 1;
+  // Format the ID with padding for a consistent look (e.g., RCPT-1001)
+  return `RCPT-${String(nextReceiptNumber).padStart(4, '0')}`;
+};
+
 
 const App: React.FC = () => {
   const [formData, setFormData] = useState<DonationData>({
@@ -14,20 +25,10 @@ const App: React.FC = () => {
     donationAmount: 100,
     donationType: 'Cash',
     goodsDescription: '',
-    receiptId: '',
+    receiptId: getNextReceiptId(),
   });
 
   const [isLoading, setIsLoading] = useState(false);
-
-  const generateReceiptId = useCallback(() => {
-    const timestamp = Date.now();
-    const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
-    return `TXN-${timestamp}-${randomPart}`;
-  }, []);
-
-  useEffect(() => {
-    setFormData(prev => ({ ...prev, receiptId: generateReceiptId() }));
-  }, [generateReceiptId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -72,12 +73,26 @@ const App: React.FC = () => {
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`donation-receipt-${formData.receiptId}.pdf`);
 
+      // On successful PDF save, update the counter in localStorage
+      const usedReceiptId = formData.receiptId;
+      // Extract the number from the ID (e.g., "RCPT-1001" -> 1001)
+      if (usedReceiptId.startsWith('RCPT-')) {
+        const usedReceiptNumber = parseInt(usedReceiptId.split('-')[1], 10);
+        if (!isNaN(usedReceiptNumber)) {
+          // Save the number of the receipt that was just generated.
+          localStorage.setItem('donationReceiptCounter', String(usedReceiptNumber));
+        }
+      }
+
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Sorry, there was an error generating the PDF. Please try again.');
     } finally {
       setIsLoading(false);
-      setFormData(prev => ({ ...prev, receiptId: generateReceiptId() }));
+      // Update the form to show the next receipt ID for the next transaction.
+      // If the PDF failed, getNextReceiptId will return the same ID.
+      // If it succeeded, it will return the next incremented ID.
+      setFormData(prev => ({ ...prev, receiptId: getNextReceiptId() }));
     }
   };
 
