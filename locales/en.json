@@ -16,6 +16,7 @@
   "goodsDescriptionLabel": "Description of Goods",
   "goodsDescriptionPlaceholder": "e.g., 1 computer, 5 blankets",
   "generateButton": "Save & Download PDF",
+  "downloadButton": "Download PDF",
   "generatingButton": "Generating PDF...",
   "livePreviewTitle": "Live Preview",
   "historyTitle": "Receipt History",

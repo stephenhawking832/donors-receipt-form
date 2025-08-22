@@ -7,6 +7,8 @@ import ReceiptPreview from './components/ReceiptPreview';
 import ReceiptHistory from './components/ReceiptHistory';
 import Settings from './components/Settings';
 
+const isPwaMode = window.matchMedia('(display-mode: standalone)').matches;
+
 // Helper function to get the next available receipt ID.
 const getNextReceiptId = (): string => {
   const lastReceiptNumber = parseInt(localStorage.getItem('donationReceiptCounter') || '1000', 10);
@@ -40,8 +42,10 @@ const App: React.FC = () => {
   const [currentTranslations, setCurrentTranslations] = useState<Translations>({});
 
   useEffect(() => {
-    // Load config and saved receipts from localStorage on initial render
+    // Load config and saved receipts from localStorage on initial render ONLY if in PWA mode
     const loadData = () => {
+        if (!isPwaMode) return;
+
         try {
             const storedOrgData = localStorage.getItem('orgData');
             if (storedOrgData) {
@@ -101,7 +105,9 @@ const App: React.FC = () => {
 
   const handleOrgDataChange = (newOrgData: OrgData) => {
     setOrgData(newOrgData);
-    localStorage.setItem('orgData', JSON.stringify(newOrgData));
+    if (isPwaMode) {
+      localStorage.setItem('orgData', JSON.stringify(newOrgData));
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -156,7 +162,8 @@ const App: React.FC = () => {
   const handleGenerateAndSavePdf = async () => {
     const success = await generatePdf(formData);
 
-    if (success) {
+    // Only save the receipt and update ID if in PWA mode
+    if (success && isPwaMode) {
       // Add new receipt to the beginning of the history
       const newSavedReceipts = [formData, ...savedReceipts];
       setSavedReceipts(newSavedReceipts);
@@ -270,7 +277,7 @@ const App: React.FC = () => {
                       {t('generatingButton')}
                     </>
                   ) : (
-                    t('generateButton')
+                    t(isPwaMode ? 'generateButton' : 'downloadButton')
                   )}
                 </button>
               </form>
