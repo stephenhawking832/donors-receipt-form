@@ -1,18 +1,13 @@
 import React from 'react';
-import { DonationData } from '../types';
+import { DonationData, OrgData } from '../types';
 
 interface ReceiptPreviewProps {
   data: DonationData;
+  orgData: OrgData;
 }
 
-const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({ data }) => {
+const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({ data, orgData }) => {
   const { donorName, donorAddress, donorEmail, donationDate, donationAmount, donationType, goodsDescription, receiptId } = data;
-  
-  const orgDetails = {
-    name: "Generous Hearts Foundation",
-    address: "123 Charity Lane, Philanthropy, TX 78701",
-    ein: "12-3456789",
-  };
   
   const formattedAmount = typeof donationAmount === 'number' 
     ? `$${donationAmount.toFixed(2)}` 
@@ -23,9 +18,9 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({ data }) => {
       {/* Header */}
       <div className="flex justify-between items-start pb-4 border-b">
         <div className="text-left">
-          <h1 className="text-2xl font-bold text-gray-900">{orgDetails.name}</h1>
-          <p className="text-xs text-gray-500">{orgDetails.address}</p>
-          <p className="text-xs text-gray-500">EIN: {orgDetails.ein}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{orgData.name}</h1>
+          <p className="text-xs text-gray-500">{orgData.address}</p>
+          <p className="text-xs text-gray-500">EIN: {orgData.ein}</p>
         </div>
         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

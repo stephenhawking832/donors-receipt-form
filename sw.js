@@ -1,4 +1,4 @@
-const CACHE_NAME = 'donation-receipt-cache-v1';
+const CACHE_NAME = 'donation-receipt-cache-v2';
 const PRECACHE_URLS = [
     '/',
     '/index.html',
@@ -6,7 +6,9 @@ const PRECACHE_URLS = [
     '/App.tsx',
     '/types.ts',
     '/components/FormField.tsx',
-    '/components/ReceiptPreview.tsx'
+    '/components/ReceiptPreview.tsx',
+    '/components/ReceiptHistory.tsx',
+    '/config.json'
 ];
 
 self.addEventListener('install', event => {
@@ -59,7 +61,7 @@ self.addEventListener('fetch', event => {
             caches.open(CACHE_NAME)
               .then(cache => {
                 // We only cache external GET requests, not local files again.
-                if (event.request.method === 'GET' && event.request.url.startsWith('https://')) {
+                if (event.request.method === 'GET' && (event.request.url.startsWith('https://') || event.request.url.endsWith('.json'))) {
                     cache.put(event.request, responseToCache);
                 }
               });

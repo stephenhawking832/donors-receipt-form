@@ -8,3 +8,9 @@ export interface DonationData {
   goodsDescription: string;
   receiptId: string;
 }
+
+export interface OrgData {
+  name: string;
+  address: string;
+  ein: string;
+}
