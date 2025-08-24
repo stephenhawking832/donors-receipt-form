@@ -1,16 +1,8 @@
-const CACHE_NAME = 'donation-receipt-cache-v7';
+const CACHE_NAME = 'donation-receipt-cache-v9';
 const PRECACHE_URLS = [
     './',
     './index.html',
-    './index.tsx',
-    './App.tsx',
-    './types.ts',
-    './components/FormField.tsx',
-    './components/ReceiptPreview.tsx',
-    './components/ReceiptHistory.tsx',
-    './components/Settings.tsx',
-    './locales/en.json',
-    './locales/he.json'
+    './manifest.json'
 ];
 
 self.addEventListener('install', event => {

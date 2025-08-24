@@ -9,6 +9,112 @@ import Settings from './components/Settings';
 
 const isPwaMode = window.matchMedia('(display-mode: standalone)').matches;
 
+// By embedding translations, we avoid any pathing or build issues with JSON files.
+const enTranslations: Translations = {
+  "mainTitle": "Donation Receipt Generator",
+  "mainSubtitle": "Create and manage your donation receipts with ease.",
+  "createReceiptTab": "Create Receipt",
+  "historyTab": "Receipt History",
+  "settingsTab": "Settings",
+  "receiptDetailsTitle": "Receipt Details",
+  "donorNameLabel": "Donor Full Name",
+  "donorAddressLabel": "Donor Full Address",
+  "donorEmailLabel": "Donor Email",
+  "donationDateLabel": "Donation Date",
+  "donationTypeLabel": "Donation Type",
+  "cashOption": "Cash",
+  "goodsOption": "Goods",
+  "amountLabel": "Amount (USD)",
+  "goodsDescriptionLabel": "Description of Goods",
+  "goodsDescriptionPlaceholder": "e.g., 1 computer, 5 blankets",
+  "generateButton": "Save & Download PDF",
+  "downloadButton": "Download PDF",
+  "generatingButton": "Generating PDF...",
+  "livePreviewTitle": "Live Preview",
+  "historyTitle": "Receipt History",
+  "searchDonorLabel": "Search by Donor Name",
+  "searchDonorPlaceholder": "e.g., Jane Doe",
+  "startDateLabel": "Start Date",
+  "endDateLabel": "End Date",
+  "minAmountLabel": "Min Amount",
+  "minAmountPlaceholder": "0",
+  "maxAmountLabel": "Max Amount",
+  "maxAmountPlaceholder": "1000",
+  "clearFiltersButton": "Clear Filters",
+  "receiptIdHeader": "Receipt ID",
+  "donorNameHeader": "Donor Name",
+  "dateHeader": "Date",
+  "amountHeader": "Amount",
+  "actionsHeader": "Actions",
+  "redownloadAction": "Re-download",
+  "noReceiptsFound": "No receipts found.",
+  "settingsTitle": "Organization Settings",
+  "orgNameLabel": "Organization Name",
+  "orgAddressLabel": "Organization Address",
+  "orgEinLabel": "Organization EIN",
+  "saveChangesButton": "Save Changes",
+  "savedButton": "Saved!",
+  "manageConfigFileTitle": "Manage Configuration File",
+  "manageConfigFileDescription": "You can also manage your settings by uploading or downloading a `config.json` file. This is useful for backing up your settings or transferring them between devices.",
+  "uploadConfigButton": "Upload config.json",
+  "downloadTemplateButton": "Download Template",
+  "configLoadSuccess": "Configuration loaded successfully!",
+  "configLoadError": "Failed to load config file. Please check the file format."
+};
+
+const heTranslations: Translations = {
+  "mainTitle": "מחולל קבלות תרומה",
+  "mainSubtitle": "צור ונהל את קבלות התרומה שלך בקלות.",
+  "createReceiptTab": "יצירת קבלה",
+  "historyTab": "היסטוריית קבלות",
+  "settingsTab": "הגדרות",
+  "receiptDetailsTitle": "פרטי הקבלה",
+  "donorNameLabel": "שם מלא של התורם",
+  "donorAddressLabel": "כתובת מלאה של התורם",
+  "donorEmailLabel": "אימייל של התורם",
+  "donationDateLabel": "תאריך התרומה",
+  "donationTypeLabel": "סוג התרומה",
+  "cashOption": "מזומן",
+  "goodsOption": "שווה כסף",
+  "amountLabel": "סכום (USD)",
+  "goodsDescriptionLabel": "תיאור הטובין",
+  "goodsDescriptionPlaceholder": "לדוגמה: מחשב אחד, 5 שמיכות",
+  "generateButton": "שמור והורד PDF",
+  "downloadButton": "הורד PDF",
+  "generatingButton": "יוצר PDF...",
+  "livePreviewTitle": "תצוגה מקדימה",
+  "historyTitle": "היסטוריית קבלות",
+  "searchDonorLabel": "חפש לפי שם תורם",
+  "searchDonorPlaceholder": "לדוגמה: ישראל ישראלי",
+  "startDateLabel": "תאריך התחלה",
+  "endDateLabel": "תאריך סיום",
+  "minAmountLabel": "סכום מינימלי",
+  "minAmountPlaceholder": "0",
+  "maxAmountLabel": "סכום מקסימלי",
+  "maxAmountPlaceholder": "1000",
+  "clearFiltersButton": "נקה מסננים",
+  "receiptIdHeader": "מזהה קבלה",
+  "donorNameHeader": "שם התורם",
+  "dateHeader": "תאריך",
+  "amountHeader": "סכום",
+  "actionsHeader": "פעולות",
+  "redownloadAction": "הורדה מחדש",
+  "noReceiptsFound": "לא נמצאו קבלות.",
+  "settingsTitle": "הגדרות ארגון",
+  "orgNameLabel": "שם הארגון",
+  "orgAddressLabel": "כתובת הארגון",
+  "orgEinLabel": "מספר עמותה/ח\"פ",
+  "saveChangesButton": "שמור שינויים",
+  "savedButton": "נשמר!",
+  "manageConfigFileTitle": "ניהול קובץ הגדרות",
+  "manageConfigFileDescription": "ניתן גם לנהל את ההגדרות על ידי העלאה או הורדה של קובץ `config.json`. שימושי לגיבוי ההגדרות או להעברתן בין מכשירים.",
+  "uploadConfigButton": "העלה קובץ config.json",
+  "downloadTemplateButton": "הורד תבנית",
+  "configLoadSuccess": "ההגדרות נטענו בהצלחה!",
+  "configLoadError": "טעינת קובץ ההגדרות נכשלה. אנא בדוק את פורמט הקובץ."
+};
+
+
 // Helper function to get the next available receipt ID.
 const getNextReceiptId = (): string => {
   const lastReceiptNumber = parseInt(localStorage.getItem('donationReceiptCounter') || '1000', 10);
@@ -74,28 +180,7 @@ const App: React.FC = () => {
   useEffect(() => {
     document.documentElement.dir = language === 'he' ? 'rtl' : 'ltr';
     localStorage.setItem('appLanguage', language);
-
-    const loadTranslations = async () => {
-      let translationsUrl = `./locales/${language}.json`;
-      try {
-        let response = await fetch(translationsUrl);
-        if (!response.ok) {
-          console.error(`Failed to load ${translationsUrl}, falling back to English.`);
-          translationsUrl = `./locales/en.json`;
-          response = await fetch(translationsUrl);
-        }
-        if (!response.ok) {
-          throw new Error('Failed to load primary and fallback translations.');
-        }
-        const data = await response.json();
-        setCurrentTranslations(data);
-      } catch (error) {
-        console.error(error);
-        setCurrentTranslations({}); // Set to empty on error to avoid breaking the app
-      }
-    };
-
-    loadTranslations();
+    setCurrentTranslations(language === 'he' ? heTranslations : enTranslations);
   }, [language]);
   
   const t = useCallback((key: string): string => {
