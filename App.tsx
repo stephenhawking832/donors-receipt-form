@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { DonationData, OrgData, Translations } from './types';
@@ -116,6 +116,12 @@ const heTranslations: Translations = {
   "configLoadError": "טעינת קובץ ההגדרות נכשלה. אנא בדוק את פורמט הקובץ."
 };
 
+type DonorInfo = {
+  donorName: string;
+  donorAddress: string;
+  donorEmail: string;
+  donorPhone: string;
+}
 
 // Helper function to get the next available receipt ID.
 const getNextReceiptId = (): string => {
@@ -149,6 +155,12 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'create' | 'history' | 'settings'>('create');
   const [language, setLanguage] = useState<'en' | 'he'>(localStorage.getItem('appLanguage') as 'en' | 'he' || 'en');
   const [currentTranslations, setCurrentTranslations] = useState<Translations>({});
+  
+  // State for donor autocomplete
+  const [donorSuggestions, setDonorSuggestions] = useState<DonorInfo[]>([]);
+  const [isDropdownVisible, setIsDropdownVisible] = useState(false);
+  const autocompleteWrapperRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     // Load config and saved receipts from localStorage on initial render ONLY if in PWA mode
@@ -186,10 +198,41 @@ const App: React.FC = () => {
     setCurrentTranslations(language === 'he' ? heTranslations : enTranslations);
   }, [language]);
   
+  // Effect to close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (autocompleteWrapperRef.current && !autocompleteWrapperRef.current.contains(event.target as Node)) {
+            setIsDropdownVisible(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const t = useCallback((key: string): string => {
     return currentTranslations[key] || key;
   }, [currentTranslations]);
 
+  const uniqueDonors = useMemo(() => {
+    if (!isPwaMode) return [];
+    const donorsMap = new Map<string, DonorInfo>();
+    // Newest receipts are at the start of the array, so we iterate normally.
+    // If a donor appears again, their older info will be ignored.
+    savedReceipts.forEach(receipt => {
+        const normalizedName = receipt.donorName.trim().toLowerCase();
+        if (normalizedName && !donorsMap.has(normalizedName)) {
+            donorsMap.set(normalizedName, {
+                donorName: receipt.donorName,
+                donorAddress: receipt.donorAddress,
+                donorEmail: receipt.donorEmail,
+                donorPhone: receipt.donorPhone,
+            });
+        }
+    });
+    return Array.from(donorsMap.values());
+  }, [savedReceipts]);
 
   const handleOrgDataChange = (newOrgData: OrgData) => {
     setOrgData(newOrgData);
@@ -210,6 +253,31 @@ const App: React.FC = () => {
       ...prev,
       [name]: processedValue,
     }));
+
+    if (name === 'donorName' && isPwaMode) {
+        if (value.trim() === '') {
+            setDonorSuggestions([]);
+            setIsDropdownVisible(false);
+        } else {
+            const filtered = uniqueDonors.filter(donor =>
+                donor.donorName.toLowerCase().includes(value.toLowerCase())
+            );
+            setDonorSuggestions(filtered);
+            setIsDropdownVisible(filtered.length > 0);
+        }
+    }
+  };
+
+  const handleDonorSelect = (donor: DonorInfo) => {
+    setFormData(prev => ({
+        ...prev,
+        donorName: donor.donorName,
+        donorAddress: donor.donorAddress,
+        donorEmail: donor.donorEmail,
+        donorPhone: donor.donorPhone,
+    }));
+    setIsDropdownVisible(false);
+    setDonorSuggestions([]);
   };
 
   const generatePdf = async (data: DonationData) => {
@@ -338,7 +406,24 @@ const App: React.FC = () => {
             <div className="bg-white p-6 rounded-lg shadow-md">
               <h2 className="text-xl font-semibold text-slate-700 mb-6 border-b pb-3">{t('receiptDetailsTitle')}</h2>
               <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-                <FormField label={t('donorNameLabel')} id="donorName" name="donorName" type="text" value={formData.donorName} onChange={handleChange} required />
+                <div className="relative" ref={autocompleteWrapperRef}>
+                  <FormField label={t('donorNameLabel')} id="donorName" name="donorName" type="text" value={formData.donorName} onChange={handleChange} required autoComplete="off" />
+                  {isPwaMode && isDropdownVisible && donorSuggestions.length > 0 && (
+                    <ul className="absolute z-10 w-full bg-white border border-slate-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg" role="listbox">
+                      {donorSuggestions.map((donor, index) => (
+                        <li
+                          key={index}
+                          className="px-4 py-2 text-sm text-slate-700 cursor-pointer hover:bg-indigo-50"
+                          onClick={() => handleDonorSelect(donor)}
+                          role="option"
+                          aria-selected="false"
+                        >
+                          {donor.donorName}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
                 <FormField label={t('donorAddressLabel')} id="donorAddress" name="donorAddress" as="textarea" value={formData.donorAddress} onChange={handleChange} required />
                 <FormField label={t('donorEmailLabel')} id="donorEmail" name="donorEmail" type="email" value={formData.donorEmail} onChange={handleChange} required />
                 <FormField label={t('donorPhoneLabel')} id="donorPhone" name="donorPhone" type="tel" value={formData.donorPhone} onChange={handleChange} />
