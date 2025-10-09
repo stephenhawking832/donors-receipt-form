@@ -16,7 +16,7 @@ export const initDB = async () => {
 
   try {
     SQL = await initSqlJs({
-      locateFile: file => `https://aistudiocdn.com/sql.js@1.10.3/dist/${file}`
+      locateFile: file => `./${file}`
     });
 
     const dbFromLocalStorage = await loadDbFromIndexedDB();

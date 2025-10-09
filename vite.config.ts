@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
       plugins: [
         VitePWA({
           registerType: 'autoUpdate',
-          includeAssets: ['apple-touch-icon.svg'],
+          includeAssets: ['apple-touch-icon.svg', 'sql-wasm.wasm'],
           manifest: {
             name: 'Donation Receipt Generator',
             short_name: 'Receipt Gen',
