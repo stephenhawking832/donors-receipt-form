@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
       plugins: [
         VitePWA({
           registerType: 'autoUpdate',
-          includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+          includeAssets: ['apple-touch-icon.svg'],
           manifest: {
             name: 'Donation Receipt Generator',
             short_name: 'Receipt Gen',
@@ -19,23 +19,25 @@ export default defineConfig(({ mode }) => {
             theme_color: '#6366f1',
             background_color: '#f1f5f9',
             display: 'standalone',
+            scope: '.',
+            start_url: '.',
             icons: [
               {
-                src: 'icon-192x192.png',
+                src: 'icon-192x192.svg',
                 sizes: '192x192',
-                type: 'image/png',
+                type: 'image/svg+xml',
                 purpose: 'any maskable'
               },
               {
-                src: 'icon-512x512.png',
+                src: 'icon-512x512.svg',
                 sizes: '512x512',
-                type: 'image/png',
+                type: 'image/svg+xml',
                 purpose: 'any maskable'
               }
             ]
           },
           workbox: {
-            globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
+            globPatterns: ['**/*.{js,css,html,svg,ico}'],
           },
           devOptions: {
             enabled: true
