@@ -2,7 +2,9 @@ const CACHE_NAME = 'donation-receipt-cache-v9';
 const PRECACHE_URLS = [
     './',
     './index.html',
-    './manifest.json'
+    './manifest.json',
+    './icon-192x192.png',
+    './icon-512x512.png'
 ];
 
 self.addEventListener('install', event => {
