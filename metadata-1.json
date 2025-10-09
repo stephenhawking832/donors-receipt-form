@@ -1,5 +1,0 @@
-{
-  "name": "Donation Receipt Generator",
-  "description": "A web application to generate PDF donation receipts. Users can fill in donor and donation details, see a live preview, and download a formatted PDF.",
-  "requestFramePermissions": []
-}
