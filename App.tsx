@@ -280,6 +280,8 @@ const App: React.FC = () => {
       db.saveLastReceiptNumber(formData.receiptId);
       
       const newReceiptId = await db.getNextReceiptIdString();
+      
+      // Smart form reset
       setFormData(prev => ({
           ...prev, 
           donorName: '',
@@ -288,6 +290,7 @@ const App: React.FC = () => {
           donorPhone: '',
           donationAmount: '',
           goodsDescription: '',
+          donationDate: new Date().toISOString().split('T')[0], // Reset date to today
           receiptId: newReceiptId 
       }));
 
@@ -375,15 +378,16 @@ const App: React.FC = () => {
                   <FormField label={t('donorNameLabel')} id="donorName" name="donorName" type="text" value={formData.donorName} onChange={handleChange} required autoComplete="off" />
                   {isPwaMode && isDropdownVisible && donorSuggestions.length > 0 && (
                     <ul className="absolute z-10 w-full bg-white border border-slate-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg" role="listbox">
-                      {donorSuggestions.map((donor, index) => (
+                      {donorSuggestions.map((donor) => (
                         <li
-                          key={index}
+                          key={donor.id}
                           className="px-4 py-2 text-sm text-slate-700 cursor-pointer hover:bg-indigo-50"
                           onClick={() => handleDonorSelect(donor)}
                           role="option"
                           aria-selected="false"
                         >
-                          {donor.name}
+                          <div className="font-medium">{donor.name}</div>
+                          <div className="text-xs text-slate-500">{donor.email}</div>
                         </li>
                       ))}
                     </ul>

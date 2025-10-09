@@ -194,7 +194,7 @@ const migrateFromLocalStorage = async () => {
 
 /**
  * Finds a donor by name. If they don't exist, creates them.
- * If they exist, updates their address/email/phone if the new info is more complete.
+ * If they exist, updates their details with the new information provided.
  * @returns The donor's ID.
  */
 const findOrCreateDonor = (donor: { donorName: string; donorAddress: string; donorEmail: string; donorPhone: string; }): number => {
@@ -205,27 +205,20 @@ const findOrCreateDonor = (donor: { donorName: string; donorAddress: string; don
     const existingDonor = selectStmt.getAsObject();
     selectStmt.free();
     
-    // Simple update logic: if new field has value and old one didn't, update.
-    const updateNeeded = (
-        (donor.donorAddress && !existingDonor.address) ||
-        (donor.donorEmail && !existingDonor.email) ||
-        (donor.donorPhone && !existingDonor.phone)
-    );
+    // Always update with the latest info from the form, assuming it's the most current.
+    const updateStmt = dbInstance.prepare(`
+        UPDATE donors 
+        SET address = :address, email = :email, phone = :phone 
+        WHERE id = :id
+    `);
+    updateStmt.run({
+        ':address': donor.donorAddress || existingDonor.address,
+        ':email': donor.donorEmail || existingDonor.email,
+        ':phone': donor.donorPhone || existingDonor.phone,
+        ':id': existingDonor.id
+    });
+    updateStmt.free();
     
-    if (updateNeeded) {
-        const updateStmt = dbInstance.prepare(`
-            UPDATE donors 
-            SET address = :address, email = :email, phone = :phone 
-            WHERE id = :id
-        `);
-        updateStmt.run({
-            ':address': donor.donorAddress || existingDonor.address,
-            ':email': donor.donorEmail || existingDonor.email,
-            ':phone': donor.donorPhone || existingDonor.phone,
-            ':id': existingDonor.id
-        });
-        updateStmt.free();
-    }
     return existingDonor.id;
   }
   selectStmt.free();
