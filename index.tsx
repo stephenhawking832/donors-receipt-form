@@ -13,17 +13,3 @@ root.render(
     <App />
   </React.StrictMode>
 );
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // Path to the service worker file. It must be an absolute path from the root.
-    const swUrl = `/donors-receipt-form/sw.js`;
-    navigator.serviceWorker.register(swUrl)
-      .then(registration => {
-        console.log('Service Worker registered: ', registration);
-      })
-      .catch(registrationError => {
-        console.log('Service Worker registration failed: ', registrationError);
-      });
-  });
-}
