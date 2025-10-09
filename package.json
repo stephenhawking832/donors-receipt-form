@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://stephenhawking832.github.io/donors-receipt-form/",
+  "homepage": "https://YOUR-USERNAME.github.io/YOUR-REPOSITORY-NAME/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

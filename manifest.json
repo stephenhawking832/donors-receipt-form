@@ -3,19 +3,19 @@
   "name": "Donation Receipt Generator",
   "icons": [
     {
-      "src": "./icon-192x192.png",
+      "src": "/donors-receipt-form/icon-192x192.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any maskable"
     },
     {
-      "src": "./icon-512x512.png",
+      "src": "/donors-receipt-form/icon-512x512.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/donors-receipt-form/",
   "display": "standalone",
   "theme_color": "#6366f1",
   "background_color": "#f1f5f9",

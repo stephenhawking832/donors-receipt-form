@@ -16,7 +16,9 @@ root.render(
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
+    // Path to the service worker file. It must be an absolute path from the root.
+    const swUrl = `/donors-receipt-form/sw.js`;
+    navigator.serviceWorker.register(swUrl)
       .then(registration => {
         console.log('Service Worker registered: ', registration);
       })
