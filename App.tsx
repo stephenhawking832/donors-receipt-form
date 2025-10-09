@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { DonationData, OrgData, Translations } from './types';
+import { DonationData, OrgData, Translations, Donor, HistoryFilter } from './types';
 import FormField from './components/FormField';
 import ReceiptPreview from './components/ReceiptPreview';
 import ReceiptHistory from './components/ReceiptHistory';
 import Settings from './components/Settings';
+import * as db from './database';
 
 const isPwaMode = window.matchMedia('(display-mode: standalone)').matches;
 
-// By embedding translations, we avoid any pathing or build issues with JSON files.
 const enTranslations: Translations = {
   "mainTitle": "Donation Receipt Generator",
   "mainSubtitle": "Create and manage your donation receipts with ease.",
@@ -60,7 +60,8 @@ const enTranslations: Translations = {
   "uploadConfigButton": "Upload config.json",
   "downloadTemplateButton": "Download Template",
   "configLoadSuccess": "Configuration loaded successfully!",
-  "configLoadError": "Failed to load config file. Please check the file format."
+  "configLoadError": "Failed to load config file. Please check the file format.",
+  "dbLoading": "Initializing Database..."
 };
 
 const heTranslations: Translations = {
@@ -113,17 +114,10 @@ const heTranslations: Translations = {
   "uploadConfigButton": "העלה קובץ config.json",
   "downloadTemplateButton": "הורד תבנית",
   "configLoadSuccess": "ההגדרות נטענו בהצלחה!",
-  "configLoadError": "טעינת קובץ ההגדרות נכשלה. אנא בדוק את פורמט הקובץ."
+  "configLoadError": "טעינת קובץ ההגדרות נכשלה. אנא בדוק את פורמט הקובץ.",
+  "dbLoading": "מפעיל את מסד הנתונים..."
 };
 
-type DonorInfo = {
-  donorName: string;
-  donorAddress: string;
-  donorEmail: string;
-  donorPhone: string;
-}
-
-// Helper function to get the next available receipt ID.
 const getNextReceiptId = (): string => {
   const lastReceiptNumber = parseInt(localStorage.getItem('donationReceiptCounter') || '1000', 10);
   const nextReceiptNumber = lastReceiptNumber + 1;
@@ -151,46 +145,51 @@ const App: React.FC = () => {
   
   const [orgData, setOrgData] = useState<OrgData>(defaultOrgData);
   const [isLoading, setIsLoading] = useState(false);
-  const [savedReceipts, setSavedReceipts] = useState<DonationData[]>([]);
+  const [isDbLoading, setIsDbLoading] = useState(true);
+  const [receiptHistory, setReceiptHistory] = useState<DonationData[]>([]);
   const [activeTab, setActiveTab] = useState<'create' | 'history' | 'settings'>('create');
   const [language, setLanguage] = useState<'en' | 'he'>(localStorage.getItem('appLanguage') as 'en' | 'he' || 'en');
   const [currentTranslations, setCurrentTranslations] = useState<Translations>({});
   
-  // State for donor autocomplete
-  const [donorSuggestions, setDonorSuggestions] = useState<DonorInfo[]>([]);
+  const [donorSuggestions, setDonorSuggestions] = useState<Donor[]>([]);
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const autocompleteWrapperRef = useRef<HTMLDivElement>(null);
 
-
-  useEffect(() => {
-    // Load config and saved receipts from localStorage on initial render ONLY if in PWA mode
-    const loadData = () => {
-        if (!isPwaMode) return;
-
-        try {
-            const storedOrgData = localStorage.getItem('orgData');
-            if (storedOrgData) {
-                setOrgData(JSON.parse(storedOrgData));
-            } else {
-                setOrgData(defaultOrgData); // Fallback to default if nothing in storage
-            }
-        } catch (error) {
-            console.error("Failed to parse org data from localStorage", error);
-            setOrgData(defaultOrgData);
-        }
-    
-        try {
-          const storedReceipts = localStorage.getItem('donationReceipts');
-          if (storedReceipts) {
-            setSavedReceipts(JSON.parse(storedReceipts));
-          }
-        } catch (error) {
-          console.error("Failed to parse receipts from localStorage", error);
-        }
+  const t = useCallback((key: string): string => {
+    return currentTranslations[key] || key;
+  }, [currentTranslations]);
+  
+  const loadInitialData = useCallback(async () => {
+    if (!isPwaMode) {
+      setIsDbLoading(false);
+      return;
     };
     
-    loadData();
-  }, []);
+    setIsDbLoading(true);
+    await db.initDB();
+
+    try {
+      const storedOrgData = localStorage.getItem('orgData');
+      if (storedOrgData) {
+        setOrgData(JSON.parse(storedOrgData));
+      } else {
+        setOrgData(defaultOrgData);
+      }
+    } catch (error) {
+      console.error("Failed to parse org data from localStorage", error);
+      setOrgData(defaultOrgData);
+    }
+    
+    // Fetch initial history
+    const initialHistory = db.getReceipts({});
+    setReceiptHistory(initialHistory);
+
+    setIsDbLoading(false);
+  }, [t]);
+
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
 
   useEffect(() => {
     document.documentElement.dir = language === 'he' ? 'rtl' : 'ltr';
@@ -198,7 +197,6 @@ const App: React.FC = () => {
     setCurrentTranslations(language === 'he' ? heTranslations : enTranslations);
   }, [language]);
   
-  // Effect to close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (autocompleteWrapperRef.current && !autocompleteWrapperRef.current.contains(event.target as Node)) {
@@ -210,29 +208,6 @@ const App: React.FC = () => {
         document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-
-  const t = useCallback((key: string): string => {
-    return currentTranslations[key] || key;
-  }, [currentTranslations]);
-
-  const uniqueDonors = useMemo(() => {
-    if (!isPwaMode) return [];
-    const donorsMap = new Map<string, DonorInfo>();
-    // Newest receipts are at the start of the array, so we iterate normally.
-    // If a donor appears again, their older info will be ignored.
-    savedReceipts.forEach(receipt => {
-        const normalizedName = receipt.donorName.trim().toLowerCase();
-        if (normalizedName && !donorsMap.has(normalizedName)) {
-            donorsMap.set(normalizedName, {
-                donorName: receipt.donorName,
-                donorAddress: receipt.donorAddress,
-                donorEmail: receipt.donorEmail,
-                donorPhone: receipt.donorPhone,
-            });
-        }
-    });
-    return Array.from(donorsMap.values());
-  }, [savedReceipts]);
 
   const handleOrgDataChange = (newOrgData: OrgData) => {
     setOrgData(newOrgData);
@@ -255,44 +230,40 @@ const App: React.FC = () => {
     }));
 
     if (name === 'donorName' && isPwaMode) {
-        if (value.trim() === '') {
-            setDonorSuggestions([]);
-            setIsDropdownVisible(false);
-        } else {
-            const filtered = uniqueDonors.filter(donor =>
-                donor.donorName.toLowerCase().includes(value.toLowerCase())
-            );
-            setDonorSuggestions(filtered);
-            setIsDropdownVisible(filtered.length > 0);
-        }
+      if (value.trim() === '') {
+        setDonorSuggestions([]);
+        setIsDropdownVisible(false);
+      } else {
+        const suggestions = db.getDonorsForAutocomplete(value);
+        setDonorSuggestions(suggestions);
+        setIsDropdownVisible(suggestions.length > 0);
+      }
     }
   };
 
-  const handleDonorSelect = (donor: DonorInfo) => {
+  const handleDonorSelect = (donor: Donor) => {
     setFormData(prev => ({
         ...prev,
-        donorName: donor.donorName,
-        donorAddress: donor.donorAddress,
-        donorEmail: donor.donorEmail,
-        donorPhone: donor.donorPhone,
+        donorName: donor.name,
+        donorAddress: donor.address,
+        donorEmail: donor.email,
+        donorPhone: donor.phone,
     }));
     setIsDropdownVisible(false);
     setDonorSuggestions([]);
   };
 
   const generatePdf = async (data: DonationData) => {
-    // Temporarily set form data to the data we want to print
-    const originalFormData = { ...formData }; // Store current form state
+    const originalFormData = { ...formData };
     setFormData(data);
     setIsLoading(true);
-
-    // Allow React to re-render with the new data before capturing
     await new Promise(resolve => setTimeout(resolve, 0));
 
     const receiptElement = document.getElementById('receipt-preview');
     if (!receiptElement) {
       console.error('Receipt element not found!');
       setIsLoading(false);
+      setFormData(originalFormData);
       return false;
     }
 
@@ -311,21 +282,16 @@ const App: React.FC = () => {
       return false;
     } finally {
       setIsLoading(false);
-      setFormData(originalFormData); // Restore the original form state
+      setFormData(originalFormData);
     }
   };
 
   const handleGenerateAndSavePdf = async () => {
     const success = await generatePdf(formData);
 
-    // Only save the receipt and update ID if in PWA mode
     if (success && isPwaMode) {
-      // Add new receipt to the beginning of the history
-      const newSavedReceipts = [formData, ...savedReceipts];
-      setSavedReceipts(newSavedReceipts);
-      localStorage.setItem('donationReceipts', JSON.stringify(newSavedReceipts));
+      await db.addReceipt(formData);
 
-      // Update the counter in localStorage
       const usedReceiptId = formData.receiptId;
       if (usedReceiptId.startsWith('RCPT-')) {
         const usedReceiptNumber = parseInt(usedReceiptId.split('-')[1], 10);
@@ -333,12 +299,10 @@ const App: React.FC = () => {
           localStorage.setItem('donationReceiptCounter', String(usedReceiptNumber));
         }
       }
-
-      // Reset form for the next entry and get the next ID
+      
       const newReceiptId = getNextReceiptId();
       setFormData(prev => ({
           ...prev, 
-          // Reset fields you want to clear, but maybe keep some like date
           donorName: '',
           donorAddress: '',
           donorEmail: '',
@@ -347,12 +311,20 @@ const App: React.FC = () => {
           goodsDescription: '',
           receiptId: newReceiptId 
       }));
+
+      // Refresh history tab to show the new receipt immediately
+      const updatedHistory = db.getReceipts({});
+      setReceiptHistory(updatedHistory);
     }
   };
   
   const handleRedownload = async (receipt: DonationData) => {
     await generatePdf(receipt);
-    // After re-download, the form state is already restored by the finally block in generatePdf
+  };
+  
+  const handleFilterChange = (filters: HistoryFilter) => {
+      const newHistory = db.getReceipts(filters);
+      setReceiptHistory(newHistory);
   };
 
   const TabButton: React.FC<{tabId: 'create' | 'history' | 'settings', children: React.ReactNode}> = ({ tabId, children }) => (
@@ -373,6 +345,20 @@ const App: React.FC = () => {
     { value: 'Cash', label: t('cashOption') },
     { value: 'Goods', label: t('goodsOption') }
   ];
+
+  if (isDbLoading && isPwaMode) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-slate-50 text-slate-700">
+        <div className="flex items-center space-x-3">
+           <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+           </svg>
+          <span>{t('dbLoading')}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="bg-slate-50 min-h-screen font-sans p-4 sm:p-6 md:p-8 flex flex-col items-center">
@@ -418,7 +404,7 @@ const App: React.FC = () => {
                           role="option"
                           aria-selected="false"
                         >
-                          {donor.donorName}
+                          {donor.name}
                         </li>
                       ))}
                     </ul>
@@ -467,7 +453,7 @@ const App: React.FC = () => {
         )}
 
         {activeTab === 'history' && (
-          <ReceiptHistory receipts={savedReceipts} onRedownload={handleRedownload} t={t} />
+          <ReceiptHistory receipts={receiptHistory} onRedownload={handleRedownload} onFilterChange={handleFilterChange} t={t} />
         )}
 
         {activeTab === 'settings' && (

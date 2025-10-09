@@ -1,21 +1,34 @@
-import React, { useState, useMemo } from 'react';
-import { DonationData } from '../types';
+import React, { useState, useEffect } from 'react';
+import { DonationData, HistoryFilter } from '../types';
 import FormField from './FormField';
 
 interface ReceiptHistoryProps {
   receipts: DonationData[];
   onRedownload: (receipt: DonationData) => void;
+  onFilterChange: (filters: HistoryFilter) => void;
   t: (key: string) => string;
 }
 
-const ReceiptHistory: React.FC<ReceiptHistoryProps> = ({ receipts, onRedownload, t }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filters, setFilters] = useState({
+const ReceiptHistory: React.FC<ReceiptHistoryProps> = ({ receipts, onRedownload, onFilterChange, t }) => {
+  const [filters, setFilters] = useState<HistoryFilter>({
+    searchTerm: '',
     startDate: '',
     endDate: '',
     minAmount: '',
     maxAmount: '',
   });
+
+  useEffect(() => {
+    // Debounce the filter change to avoid excessive DB queries
+    const handler = setTimeout(() => {
+      onFilterChange(filters);
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [filters, onFilterChange]);
+
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -23,30 +36,8 @@ const ReceiptHistory: React.FC<ReceiptHistoryProps> = ({ receipts, onRedownload,
   };
   
   const clearFilters = () => {
-    setSearchTerm('');
-    setFilters({ startDate: '', endDate: '', minAmount: '', maxAmount: '' });
+    setFilters({ searchTerm: '', startDate: '', endDate: '', minAmount: '', maxAmount: '' });
   };
-
-  const filteredReceipts = useMemo(() => {
-    return receipts.filter(receipt => {
-      // Search term filter (donor name)
-      const nameMatch = receipt.donorName.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      // Date filter
-      const donationDate = new Date(receipt.donationDate + 'T00:00:00');
-      const startDate = filters.startDate ? new Date(filters.startDate + 'T00:00:00') : null;
-      const endDate = filters.endDate ? new Date(filters.endDate + 'T00:00:00') : null;
-      const dateMatch = (!startDate || donationDate >= startDate) && (!endDate || donationDate <= endDate);
-
-      // Amount filter
-      const amount = typeof receipt.donationAmount === 'number' ? receipt.donationAmount : parseFloat(String(receipt.donationAmount));
-      const minAmount = filters.minAmount !== '' ? parseFloat(filters.minAmount) : null;
-      const maxAmount = filters.maxAmount !== '' ? parseFloat(filters.maxAmount) : null;
-      const amountMatch = (minAmount === null || amount >= minAmount) && (maxAmount === null || amount <= maxAmount);
-
-      return nameMatch && dateMatch && amountMatch;
-    });
-  }, [receipts, searchTerm, filters]);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md w-full">
@@ -59,8 +50,8 @@ const ReceiptHistory: React.FC<ReceiptHistoryProps> = ({ receipts, onRedownload,
             label={t('searchDonorLabel')}
             id="searchTerm"
             name="searchTerm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={filters.searchTerm}
+            onChange={handleFilterChange}
             placeholder={t('searchDonorPlaceholder')}
           />
           <FormField
@@ -127,8 +118,8 @@ const ReceiptHistory: React.FC<ReceiptHistoryProps> = ({ receipts, onRedownload,
             </tr>
           </thead>
           <tbody>
-            {filteredReceipts.length > 0 ? (
-              filteredReceipts.map((receipt) => (
+            {receipts.length > 0 ? (
+              receipts.map((receipt) => (
                 <tr key={receipt.receiptId} className="bg-white border-b hover:bg-slate-50">
                   <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">{receipt.receiptId}</td>
                   <td className="px-6 py-4">{receipt.donorName}</td>
