@@ -48,5 +48,10 @@
   "uploadConfigButton": "Upload config.json",
   "downloadTemplateButton": "Download Template",
   "configLoadSuccess": "Configuration loaded successfully!",
-  "configLoadError": "Failed to load config file. Please check the file format."
+  "configLoadError": "Failed to load config file. Please check the file format.",
+  "sharePanelTitle": "Receipt for {donorName} is ready!",
+  "shareViaEmail": "Share via Email",
+  "shareOnWhatsApp": "Share on WhatsApp",
+  "shareMessage": "Please remember to attach the PDF receipt that was just downloaded.",
+  "dismiss": "Dismiss"
 }

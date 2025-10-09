@@ -61,7 +61,12 @@ const enTranslations: Translations = {
   "downloadTemplateButton": "Download Template",
   "configLoadSuccess": "Configuration loaded successfully!",
   "configLoadError": "Failed to load config file. Please check the file format.",
-  "dbLoading": "Initializing Database..."
+  "dbLoading": "Initializing Database...",
+  "sharePanelTitle": "Receipt for {donorName} is ready!",
+  "shareViaEmail": "Share via Email",
+  "shareOnWhatsApp": "Share on WhatsApp",
+  "shareMessage": "Please remember to attach the PDF receipt that was just downloaded.",
+  "dismiss": "Dismiss"
 };
 
 const heTranslations: Translations = {
@@ -115,7 +120,12 @@ const heTranslations: Translations = {
   "downloadTemplateButton": "הורד תבנית",
   "configLoadSuccess": "ההגדרות נטענו בהצלחה!",
   "configLoadError": "טעינת קובץ ההגדרות נכשלה. אנא בדוק את פורמט הקובץ.",
-  "dbLoading": "מפעיל את מסד הנתונים..."
+  "dbLoading": "מפעיל את מסד הנתונים...",
+  "sharePanelTitle": "הקבלה עבור {donorName} מוכנה!",
+  "shareViaEmail": "שתף באימייל",
+  "shareOnWhatsApp": "שתף ב-WhatsApp",
+  "shareMessage": "אנא זכור לצרף את קובץ ה-PDF של הקבלה שהורדת זה עתה.",
+  "dismiss": "סגור"
 };
 
 const App: React.FC = () => {
@@ -143,14 +153,21 @@ const App: React.FC = () => {
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const autocompleteWrapperRef = useRef<HTMLDivElement>(null);
 
-  const t = useCallback((key: string): string => {
-    return currentTranslations[key] || key;
+  const [lastGenerated, setLastGenerated] = useState<{ data: DonationData } | null>(null);
+
+  const t = useCallback((key: string, replacements?: {[key: string]: string}): string => {
+    let translation = currentTranslations[key] || key;
+    if (replacements) {
+        Object.keys(replacements).forEach(rKey => {
+            translation = translation.replace(`{${rKey}}`, replacements[rKey]);
+        });
+    }
+    return translation;
   }, [currentTranslations]);
   
   const loadInitialData = useCallback(async () => {
     if (!isPwaMode) {
       setIsDbLoading(false);
-      // For non-PWA, maybe load org data from a default or give a message.
       const defaultOrgData = { name: "Generous Hearts Foundation", address: "123 Charity Lane, Philanthropy, TX 78701", ein: "12-3456789" };
       setOrgData(defaultOrgData);
       setFormData(prev => ({...prev, receiptId: 'RCPT-1001'}));
@@ -163,7 +180,6 @@ const App: React.FC = () => {
     const storedOrgData = await db.getOrgData();
     setOrgData(storedOrgData);
     
-    // Fetch initial history
     const initialHistory = db.getReceipts({});
     setReceiptHistory(initialHistory);
 
@@ -204,6 +220,7 @@ const App: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
+    setLastGenerated(null); // Hide share panel on form change
     
     let processedValue: string | number = value;
     if (type === 'number') {
@@ -239,18 +256,16 @@ const App: React.FC = () => {
     setDonorSuggestions([]);
   };
 
-  const generatePdf = async (data: DonationData) => {
+  const generatePdf = async (data: DonationData): Promise<File | null> => {
     const originalFormData = { ...formData };
-    setFormData(data);
-    setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 0));
+    setFormData(data); // Temporarily set form data for preview rendering
+    await new Promise(resolve => setTimeout(resolve, 0)); // Allow UI to update
 
     const receiptElement = document.getElementById('receipt-preview');
     if (!receiptElement) {
       console.error('Receipt element not found!');
-      setIsLoading(false);
-      setFormData(originalFormData);
-      return false;
+      setFormData(originalFormData); // Restore original form data
+      return null;
     }
 
     try {
@@ -260,53 +275,122 @@ const App: React.FC = () => {
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pdfWidth, pdfHeight] });
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`donation-receipt-${data.receiptId}.pdf`);
-      return true;
+      
+      const pdfBlob = pdf.output('blob');
+      const fileName = `donation-receipt-${data.receiptId}.pdf`;
+      return new File([pdfBlob], fileName, { type: 'application/pdf' });
+
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Sorry, there was an error generating the PDF. Please try again.');
-      return false;
+      return null;
     } finally {
-      setIsLoading(false);
-      setFormData(originalFormData);
+      setFormData(originalFormData); // Always restore original form data
     }
   };
 
   const handleGenerateAndSavePdf = async () => {
-    const success = await generatePdf(formData);
+    setIsLoading(true);
+    setLastGenerated(null);
+    const pdfFile = await generatePdf(formData);
+    setIsLoading(false);
 
-    if (success && isPwaMode) {
-      await db.addReceipt(formData);
-      db.saveLastReceiptNumber(formData.receiptId);
-      
-      const newReceiptId = await db.getNextReceiptIdString();
-      
-      // Smart form reset
-      setFormData(prev => ({
-          ...prev, 
-          donorName: '',
-          donorAddress: '',
-          donorEmail: '',
-          donorPhone: '',
-          donationAmount: '',
-          goodsDescription: '',
-          donationDate: new Date().toISOString().split('T')[0], // Reset date to today
-          receiptId: newReceiptId 
-      }));
+    if (pdfFile) {
+        // Trigger download
+        const url = URL.createObjectURL(pdfFile);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = pdfFile.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        if (isPwaMode) {
+            await db.addReceipt(formData);
+            db.saveLastReceiptNumber(formData.receiptId);
+            
+            const newReceiptId = await db.getNextReceiptIdString();
+            
+            setLastGenerated({ data: { ...formData } }); // Set data for share panel
 
-      // Refresh history tab to show the new receipt immediately
-      const updatedHistory = db.getReceipts({});
-      setReceiptHistory(updatedHistory);
+            // Smart form reset
+            setFormData(prev => ({
+                ...prev, 
+                donorName: '',
+                donorAddress: '',
+                donorEmail: '',
+                donorPhone: '',
+                donationAmount: '',
+                goodsDescription: '',
+                donationDate: new Date().toISOString().split('T')[0],
+                receiptId: newReceiptId 
+            }));
+
+            const updatedHistory = db.getReceipts({});
+            setReceiptHistory(updatedHistory);
+        } else {
+            setLastGenerated({ data: { ...formData } });
+        }
     }
   };
   
   const handleRedownload = async (receipt: DonationData) => {
-    await generatePdf(receipt);
+    setIsLoading(true);
+    const pdfFile = await generatePdf(receipt);
+    setIsLoading(false);
+
+    if (pdfFile) {
+      const url = URL.createObjectURL(pdfFile);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = pdfFile.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
   
   const handleFilterChange = (filters: HistoryFilter) => {
       const newHistory = db.getReceipts(filters);
       setReceiptHistory(newHistory);
+  };
+  
+  const cleanPhoneNumber = (phone: string) => {
+    return phone.replace(/[^0-9+]/g, '');
+  };
+
+  const SharePanel = () => {
+    if (!lastGenerated) return null;
+
+    const { data } = lastGenerated;
+    const emailSubject = `Donation Receipt from ${orgData.name}`;
+    const emailBody = `Dear ${data.donorName},\n\nThank you for your generous donation. Please find your receipt attached to this email.\n\n${t('shareMessage')}\n\nSincerely,\n${orgData.name}`;
+    const mailtoHref = `mailto:${data.donorEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+
+    const whatsappText = `Hi ${data.donorName}, thank you for your donation to ${orgData.name}. I'm sending your receipt now. ${t('shareMessage')}`;
+    const whatsappHref = `https://wa.me/${cleanPhoneNumber(data.donorPhone)}?text=${encodeURIComponent(whatsappText)}`;
+
+    return (
+        <div className="mt-4 p-4 bg-emerald-50 border border-emerald-300 rounded-lg shadow-sm relative animate-fade-in">
+             <button onClick={() => setLastGenerated(null)} className="absolute top-2 right-2 text-slate-500 hover:text-slate-800" aria-label={t('dismiss')}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <h3 className="font-semibold text-emerald-800 text-center mb-3">{t('sharePanelTitle', { donorName: data.donorName })}</h3>
+            <p className="text-xs text-center text-slate-500 mb-4">{t('shareMessage')}</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+                <a href={mailtoHref} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-2 text-center bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-sm transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" /><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" /></svg>
+                    {t('shareViaEmail')}
+                </a>
+                <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-2 text-center bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-sm transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10c0 4.418-3.582 8-8 8s-8-3.582-8-8 3.582-8 8-8 8 3.582 8 8zm-4.134-3.32a.66.66 0 00-.913-.263l-4.59 2.45a.667.667 0 00-.28.532v2.88a.667.667 0 001.002.58l4.59-2.45a.667.667 0 00.28-.532V7.26a.66.66 0 00-.085-.38z" clipRule="evenodd" /></svg>
+                    {t('shareOnWhatsApp')}
+                </a>
+            </div>
+        </div>
+    );
   };
 
   const TabButton: React.FC<{tabId: 'create' | 'history' | 'settings', children: React.ReactNode}> = ({ tabId, children }) => (
@@ -424,6 +508,7 @@ const App: React.FC = () => {
                     t(isPwaMode ? 'generateButton' : 'downloadButton')
                   )}
                 </button>
+                <SharePanel />
               </form>
             </div>
             <div className="flex flex-col">

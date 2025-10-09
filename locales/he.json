@@ -48,5 +48,10 @@
   "uploadConfigButton": "העלה קובץ config.json",
   "downloadTemplateButton": "הורד תבנית",
   "configLoadSuccess": "ההגדרות נטענו בהצלחה!",
-  "configLoadError": "טעינת קובץ ההגדרות נכשלה. אנא בדוק את פורמט הקובץ."
+  "configLoadError": "טעינת קובץ ההגדרות נכשלה. אנא בדוק את פורמט הקובץ.",
+  "sharePanelTitle": "הקבלה עבור {donorName} מוכנה!",
+  "shareViaEmail": "שתף באימייל",
+  "shareOnWhatsApp": "שתף ב-WhatsApp",
+  "shareMessage": "אנא זכור לצרף את קובץ ה-PDF של הקבלה שהורדת זה עתה.",
+  "dismiss": "סגור"
 }
