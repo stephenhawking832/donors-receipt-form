@@ -1,5 +1,5 @@
 import initSqlJs from 'sql.js';
-import { DonationData, Donor } from './types';
+import { DonationData, Donor, OrgData } from './types';
 
 // Let's cache the database instance and the SQL.js config to avoid re-initialization
 let dbInstance: any | null = null;
@@ -60,8 +60,15 @@ const createTables = () => {
       FOREIGN KEY (donor_id) REFERENCES donors (id)
     );
   `;
+  const createAppMetaTable = `
+    CREATE TABLE IF NOT EXISTS app_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    );
+  `;
   dbInstance.exec(createDonorsTable);
   dbInstance.exec(createReceiptsTable);
+  dbInstance.exec(createAppMetaTable);
   console.log("Tables created or already exist.");
 };
 
@@ -128,37 +135,61 @@ const loadDbFromIndexedDB = async (): Promise<Uint8Array | null> => {
  * One-time migration from localStorage to SQLite.
  */
 const migrateFromLocalStorage = async () => {
-    const migrationDone = localStorage.getItem('db_migration_v1_complete');
+    const migrationDone = localStorage.getItem('db_migration_v2_complete');
     if (migrationDone || !dbInstance) {
         return;
     }
 
+    console.log("Starting data migration from localStorage...");
+    let migrationOccurred = false;
+
+    // 1. Migrate old receipts
     const oldReceiptsJson = localStorage.getItem('donationReceipts');
-    if (!oldReceiptsJson) {
-        localStorage.setItem('db_migration_v1_complete', 'true');
-        return;
+    if (oldReceiptsJson) {
+        try {
+            const oldReceipts: DonationData[] = JSON.parse(oldReceiptsJson);
+            if (oldReceipts.length > 0) {
+                migrationOccurred = true;
+                console.log(`Migrating ${oldReceipts.length} receipts...`);
+                for (const receipt of oldReceipts) {
+                    await addReceipt(receipt, false); // Add without saving each time
+                }
+                // localStorage.removeItem('donationReceipts');
+            }
+        } catch (error) {
+            console.error("Error migrating receipts:", error);
+        }
     }
 
-    try {
-        const oldReceipts: DonationData[] = JSON.parse(oldReceiptsJson);
-        if (oldReceipts.length === 0) {
-            localStorage.setItem('db_migration_v1_complete', 'true');
-            return;
-        }
+    // 2. Migrate orgData
+    const oldOrgData = localStorage.getItem('orgData');
+    if (oldOrgData) {
+        try {
+            const parsedOrgData = JSON.parse(oldOrgData);
+            if (parsedOrgData.name) {
+                migrationOccurred = true;
+                console.log("Migrating organization data...");
+                await saveOrgData(parsedOrgData, false);
+                // localStorage.removeItem('orgData');
+            }
+        } catch(e) { console.error("Error migrating org data", e); }
+    }
+    
+    // 3. Migrate receipt counter
+    const lastReceiptNumber = localStorage.getItem('donationReceiptCounter');
+    if (lastReceiptNumber) {
+        migrationOccurred = true;
+        console.log("Migrating receipt counter...");
+        setMeta('last_receipt_number', lastReceiptNumber);
+        // localStorage.removeItem('donationReceiptCounter');
+    }
 
-        console.log(`Starting migration of ${oldReceipts.length} receipts from localStorage...`);
-        for (const receipt of oldReceipts) {
-            await addReceipt(receipt, false); // Add without saving each time
-        }
-
-        await saveDbToIndexedDB(); // Save once at the end
-        localStorage.setItem('db_migration_v1_complete', 'true');
-        // Optional: remove old data after successful migration
-        // localStorage.removeItem('donationReceipts');
+    if (migrationOccurred) {
+        await saveDbToIndexedDB(); // Save once at the end of all migrations
         console.log("Migration complete!");
-    } catch (error) {
-        console.error("Error during migration:", error);
     }
+
+    localStorage.setItem('db_migration_v2_complete', 'true');
 };
 
 /**
@@ -325,3 +356,68 @@ export const getReceipts = (filters: any): DonationData[] => {
     stmt.free();
     return receipts;
 };
+
+// --- Meta Data Management ---
+const getMeta = (key: string): string | null => {
+    if (!dbInstance) return null;
+    const stmt = dbInstance.prepare("SELECT value FROM app_meta WHERE key = ?");
+    stmt.bind([key]);
+    const result = stmt.step() ? stmt.get()[0] : null;
+    stmt.free();
+    return result;
+}
+
+const setMeta = (key: string, value: string) => {
+    if (!dbInstance) return;
+    const stmt = dbInstance.prepare("INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)");
+    stmt.run([key, value]);
+    stmt.free();
+}
+
+export const getNextReceiptIdString = async (): Promise<string> => {
+    if (!dbInstance) return 'RCPT-1001';
+    
+    const lastReceiptNumberStr = getMeta('last_receipt_number');
+    const lastReceiptNumber = parseInt(lastReceiptNumberStr || '1000', 10);
+    const nextReceiptNumber = lastReceiptNumber + 1;
+    
+    // This function now only calculates. Saving the number happens when the receipt is saved.
+    return `RCPT-${String(nextReceiptNumber).padStart(4, '0')}`;
+};
+
+export const saveLastReceiptNumber = (receiptId: string) => {
+    if (!dbInstance) return;
+    if (receiptId.startsWith('RCPT-')) {
+        const usedReceiptNumber = parseInt(receiptId.split('-')[1], 10);
+        if (!isNaN(usedReceiptNumber)) {
+            setMeta('last_receipt_number', String(usedReceiptNumber));
+        }
+    }
+}
+
+export const getOrgData = async (): Promise<OrgData> => {
+    const defaultOrgData = {
+        name: "Generous Hearts Foundation",
+        address: "123 Charity Lane, Philanthropy, TX 78701",
+        ein: "12-3456789",
+    };
+    if (!dbInstance) return defaultOrgData;
+
+    const orgDataJson = getMeta('org_data');
+    if (orgDataJson) {
+        try {
+            return JSON.parse(orgDataJson);
+        } catch (e) {
+            return defaultOrgData;
+        }
+    }
+    return defaultOrgData;
+}
+
+export const saveOrgData = async (orgData: OrgData, shouldSave: boolean = true) => {
+    if (!dbInstance) return;
+    setMeta('org_data', JSON.stringify(orgData));
+    if (shouldSave) {
+        await saveDbToIndexedDB();
+    }
+}

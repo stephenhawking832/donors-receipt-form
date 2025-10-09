@@ -118,18 +118,6 @@ const heTranslations: Translations = {
   "dbLoading": "מפעיל את מסד הנתונים..."
 };
 
-const getNextReceiptId = (): string => {
-  const lastReceiptNumber = parseInt(localStorage.getItem('donationReceiptCounter') || '1000', 10);
-  const nextReceiptNumber = lastReceiptNumber + 1;
-  return `RCPT-${String(nextReceiptNumber).padStart(4, '0')}`;
-};
-
-const defaultOrgData: OrgData = {
-  name: "Generous Hearts Foundation",
-  address: "123 Charity Lane, Philanthropy, TX 78701",
-  ein: "12-3456789",
-};
-
 const App: React.FC = () => {
   const [formData, setFormData] = useState<DonationData>({
     donorName: 'Jane Doe',
@@ -140,10 +128,10 @@ const App: React.FC = () => {
     donationAmount: 100,
     donationType: 'Cash',
     goodsDescription: '',
-    receiptId: getNextReceiptId(),
+    receiptId: '...',
   });
   
-  const [orgData, setOrgData] = useState<OrgData>(defaultOrgData);
+  const [orgData, setOrgData] = useState<OrgData>({ name: '', address: '', ein: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [isDbLoading, setIsDbLoading] = useState(true);
   const [receiptHistory, setReceiptHistory] = useState<DonationData[]>([]);
@@ -162,30 +150,28 @@ const App: React.FC = () => {
   const loadInitialData = useCallback(async () => {
     if (!isPwaMode) {
       setIsDbLoading(false);
+      // For non-PWA, maybe load org data from a default or give a message.
+      const defaultOrgData = { name: "Generous Hearts Foundation", address: "123 Charity Lane, Philanthropy, TX 78701", ein: "12-3456789" };
+      setOrgData(defaultOrgData);
+      setFormData(prev => ({...prev, receiptId: 'RCPT-1001'}));
       return;
     };
     
     setIsDbLoading(true);
     await db.initDB();
 
-    try {
-      const storedOrgData = localStorage.getItem('orgData');
-      if (storedOrgData) {
-        setOrgData(JSON.parse(storedOrgData));
-      } else {
-        setOrgData(defaultOrgData);
-      }
-    } catch (error) {
-      console.error("Failed to parse org data from localStorage", error);
-      setOrgData(defaultOrgData);
-    }
+    const storedOrgData = await db.getOrgData();
+    setOrgData(storedOrgData);
     
     // Fetch initial history
     const initialHistory = db.getReceipts({});
     setReceiptHistory(initialHistory);
 
+    const nextReceiptId = await db.getNextReceiptIdString();
+    setFormData(prev => ({...prev, receiptId: nextReceiptId}));
+
     setIsDbLoading(false);
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     loadInitialData();
@@ -209,10 +195,10 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const handleOrgDataChange = (newOrgData: OrgData) => {
+  const handleOrgDataChange = async (newOrgData: OrgData) => {
     setOrgData(newOrgData);
     if (isPwaMode) {
-      localStorage.setItem('orgData', JSON.stringify(newOrgData));
+      await db.saveOrgData(newOrgData);
     }
   };
 
@@ -291,16 +277,9 @@ const App: React.FC = () => {
 
     if (success && isPwaMode) {
       await db.addReceipt(formData);
-
-      const usedReceiptId = formData.receiptId;
-      if (usedReceiptId.startsWith('RCPT-')) {
-        const usedReceiptNumber = parseInt(usedReceiptId.split('-')[1], 10);
-        if (!isNaN(usedReceiptNumber)) {
-          localStorage.setItem('donationReceiptCounter', String(usedReceiptNumber));
-        }
-      }
+      db.saveLastReceiptNumber(formData.receiptId);
       
-      const newReceiptId = getNextReceiptId();
+      const newReceiptId = await db.getNextReceiptIdString();
       setFormData(prev => ({
           ...prev, 
           donorName: '',
