@@ -7,7 +7,7 @@ interface ReceiptPreviewProps {
 }
 
 const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({ data, orgData }) => {
-  const { donorName, donorAddress, donorEmail, donationDate, donationAmount, donationType, goodsDescription, receiptId } = data;
+  const { donorName, donorAddress, donorEmail, donorPhone, donationDate, donationAmount, donationType, goodsDescription, receiptId } = data;
   
   const formattedAmount = typeof donationAmount === 'number' 
     ? `$${donationAmount.toFixed(2)}` 
@@ -41,6 +41,7 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({ data, orgData }) => {
         <p className="text-sm"><strong>Name:</strong> {donorName || 'Not Provided'}</p>
         <p className="text-sm"><strong>Address:</strong> {donorAddress || 'Not Provided'}</p>
         <p className="text-sm"><strong>Email:</strong> {donorEmail || 'Not Provided'}</p>
+        <p className="text-sm"><strong>Phone:</strong> {donorPhone || 'Not Provided'}</p>
       </div>
 
       {/* Donation Details */}

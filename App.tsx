@@ -20,6 +20,7 @@ const enTranslations: Translations = {
   "donorNameLabel": "Donor Full Name",
   "donorAddressLabel": "Donor Full Address",
   "donorEmailLabel": "Donor Email",
+  "donorPhoneLabel": "Donor Phone",
   "donationDateLabel": "Donation Date",
   "donationTypeLabel": "Donation Type",
   "cashOption": "Cash",
@@ -72,6 +73,7 @@ const heTranslations: Translations = {
   "donorNameLabel": "שם מלא של התורם",
   "donorAddressLabel": "כתובת מלאה של התורם",
   "donorEmailLabel": "אימייל של התורם",
+  "donorPhoneLabel": "טלפון של התורם",
   "donationDateLabel": "תאריך התרומה",
   "donationTypeLabel": "סוג התרומה",
   "cashOption": "מזומן",
@@ -133,6 +135,7 @@ const App: React.FC = () => {
     donorName: 'Jane Doe',
     donorAddress: '456 Giving St, Anytown, USA 12345',
     donorEmail: 'jane.doe@example.com',
+    donorPhone: '123-456-7890',
     donationDate: new Date().toISOString().split('T')[0],
     donationAmount: 100,
     donationType: 'Cash',
@@ -271,6 +274,7 @@ const App: React.FC = () => {
           donorName: '',
           donorAddress: '',
           donorEmail: '',
+          donorPhone: '',
           donationAmount: '',
           goodsDescription: '',
           receiptId: newReceiptId 
@@ -337,6 +341,7 @@ const App: React.FC = () => {
                 <FormField label={t('donorNameLabel')} id="donorName" name="donorName" type="text" value={formData.donorName} onChange={handleChange} required />
                 <FormField label={t('donorAddressLabel')} id="donorAddress" name="donorAddress" as="textarea" value={formData.donorAddress} onChange={handleChange} required />
                 <FormField label={t('donorEmailLabel')} id="donorEmail" name="donorEmail" type="email" value={formData.donorEmail} onChange={handleChange} required />
+                <FormField label={t('donorPhoneLabel')} id="donorPhone" name="donorPhone" type="tel" value={formData.donorPhone} onChange={handleChange} />
                 <FormField label={t('donationDateLabel')} id="donationDate" name="donationDate" type="date" value={formData.donationDate} onChange={handleChange} required />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField label={t('donationTypeLabel')} id="donationType" name="donationType" as="select" options={donationTypeOptions} value={formData.donationType} onChange={handleChange} />

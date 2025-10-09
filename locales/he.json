@@ -8,6 +8,7 @@
   "donorNameLabel": "שם מלא של התורם",
   "donorAddressLabel": "כתובת מלאה של התורם",
   "donorEmailLabel": "אימייל של התורם",
+  "donorPhoneLabel": "טלפון של התורם",
   "donationDateLabel": "תאריך התרומה",
   "donationTypeLabel": "סוג התרומה",
   "cashOption": "מזומן",

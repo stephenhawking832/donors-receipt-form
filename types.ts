@@ -2,6 +2,7 @@ export interface DonationData {
   donorName: string;
   donorAddress: string;
   donorEmail: string;
+  donorPhone: string;
   donationDate: string;
   donationAmount: number | string;
   donationType: 'Cash' | 'Goods';

@@ -8,6 +8,7 @@
   "donorNameLabel": "Donor Full Name",
   "donorAddressLabel": "Donor Full Address",
   "donorEmailLabel": "Donor Email",
+  "donorPhoneLabel": "Donor Phone",
   "donationDateLabel": "Donation Date",
   "donationTypeLabel": "Donation Type",
   "cashOption": "Cash",
