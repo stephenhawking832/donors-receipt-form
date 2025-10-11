@@ -166,7 +166,9 @@ const App: React.FC = () => {
   }, [currentTranslations]);
   
   const loadInitialData = useCallback(async () => {
+    console.info('[App] Starting initial data load...');
     if (!isPwaMode) {
+      console.info('[App] Not in PWA mode. Using default data.');
       setIsDbLoading(false);
       const defaultOrgData = { name: "Generous Hearts Foundation", address: "123 Charity Lane, Philanthropy, TX 78701", ein: "12-3456789" };
       setOrgData(defaultOrgData);
@@ -176,31 +178,31 @@ const App: React.FC = () => {
     
     setIsDbLoading(true);
     try {
-        console.log("[App] Attempting to initialize database...");
+        console.info('[App] Initializing database...');
         await db.initDB();
-        console.log("[App] Database initialization successful.");
+        console.info('[App] Database initialized successfully.');
 
-        console.log("[App] Loading organization data...");
+        console.info('[App] Fetching organization data...');
         const storedOrgData = await db.getOrgData();
         setOrgData(storedOrgData);
-        console.log("[App] Organization data loaded.");
+        console.info('[App] Organization data loaded.');
         
-        console.log("[App] Loading receipt history...");
+        console.info('[App] Fetching initial receipt history...');
         const initialHistory = db.getReceipts({});
         setReceiptHistory(initialHistory);
-        console.log(`[App] Receipt history loaded with ${initialHistory.length} items.`);
+        console.info(`[App] ${initialHistory.length} receipts loaded.`);
 
-        console.log("[App] Calculating next receipt ID...");
+        console.info('[App] Calculating next receipt ID...');
         const nextReceiptId = await db.getNextReceiptIdString();
         setFormData(prev => ({...prev, receiptId: nextReceiptId}));
-        console.log(`[App] Next receipt ID is ${nextReceiptId}.`);
+        console.info(`[App] Next receipt ID is ${nextReceiptId}.`);
 
     } catch (error) {
-        console.error("[App] A critical error occurred during application startup in loadInitialData.", error);
-        // The user can see the detailed error in the console.
+        console.error("[App] A critical error occurred during application startup:", error);
+        alert("Failed to initialize the application database. Some features might be unavailable. Please check the console for details.");
     } finally {
         setIsDbLoading(false);
-        console.log("[App] loadInitialData finished.");
+        console.info('[App] Initial data load finished.');
     }
   }, []);
 
@@ -229,7 +231,13 @@ const App: React.FC = () => {
   const handleOrgDataChange = async (newOrgData: OrgData) => {
     setOrgData(newOrgData);
     if (isPwaMode) {
-      await db.saveOrgData(newOrgData);
+      try {
+        await db.saveOrgData(newOrgData);
+        console.info('[App] Organization data saved successfully.');
+      } catch (error) {
+        console.error('[App] Failed to save organization data:', error);
+        alert('Could not save organization settings to the database.');
+      }
     }
   };
 
@@ -272,13 +280,14 @@ const App: React.FC = () => {
   };
 
   const generatePdf = async (data: DonationData): Promise<File | null> => {
+    console.info(`[PDF] Starting PDF generation for receipt ${data.receiptId}...`);
     const originalFormData = { ...formData };
     setFormData(data); // Temporarily set form data for preview rendering
     await new Promise(resolve => setTimeout(resolve, 0)); // Allow UI to update
 
     const receiptElement = document.getElementById('receipt-preview');
     if (!receiptElement) {
-      console.error('Receipt element not found!');
+      console.error('[PDF] Critical error: Receipt element not found in DOM!');
       setFormData(originalFormData); // Restore original form data
       return null;
     }
@@ -293,10 +302,11 @@ const App: React.FC = () => {
       
       const pdfBlob = pdf.output('blob');
       const fileName = `donation-receipt-${data.receiptId}.pdf`;
+      console.info(`[PDF] PDF for ${data.receiptId} generated successfully.`);
       return new File([pdfBlob], fileName, { type: 'application/pdf' });
 
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      console.error('[PDF] Error generating PDF:', error);
       alert('Sorry, there was an error generating the PDF. Please try again.');
       return null;
     } finally {
@@ -307,63 +317,84 @@ const App: React.FC = () => {
   const handleGenerateAndSavePdf = async () => {
     setIsLoading(true);
     setLastGenerated(null);
-    const pdfFile = await generatePdf(formData);
-    setIsLoading(false);
-
-    if (pdfFile) {
-        // Trigger download
-        const url = URL.createObjectURL(pdfFile);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = pdfFile.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+    
+    try {
+        const pdfFile = await generatePdf(formData);
         
-        if (isPwaMode) {
-            await db.addReceipt(formData);
-            db.saveLastReceiptNumber(formData.receiptId);
+        if (pdfFile) {
+            // Trigger download
+            const url = URL.createObjectURL(pdfFile);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = pdfFile.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            console.info(`[App] PDF ${pdfFile.name} downloaded.`);
             
-            const newReceiptId = await db.getNextReceiptIdString();
-            
-            setLastGenerated({ data: { ...formData } }); // Set data for share panel
+            if (isPwaMode) {
+                console.info('[App] PWA Mode: Saving receipt to database...');
+                await db.addReceipt(formData);
+                db.saveLastReceiptNumber(formData.receiptId);
+                
+                const newReceiptId = await db.getNextReceiptIdString();
+                
+                setLastGenerated({ data: { ...formData } }); // Set data for share panel
 
-            // Smart form reset
-            setFormData(prev => ({
-                ...prev, 
-                donorName: '',
-                donorAddress: '',
-                donorEmail: '',
-                donorPhone: '',
-                donationAmount: '',
-                goodsDescription: '',
-                donationDate: new Date().toISOString().split('T')[0],
-                receiptId: newReceiptId 
-            }));
+                // Smart form reset
+                setFormData(prev => ({
+                    ...prev, 
+                    donorName: '',
+                    donorAddress: '',
+                    donorEmail: '',
+                    donorPhone: '',
+                    donationAmount: '',
+                    goodsDescription: '',
+                    donationDate: new Date().toISOString().split('T')[0],
+                    receiptId: newReceiptId 
+                }));
 
-            const updatedHistory = db.getReceipts({});
-            setReceiptHistory(updatedHistory);
+                const updatedHistory = db.getReceipts({});
+                setReceiptHistory(updatedHistory);
+                console.info('[App] Receipt saved and history updated.');
+            } else {
+                setLastGenerated({ data: { ...formData } });
+            }
         } else {
-            setLastGenerated({ data: { ...formData } });
+            console.warn('[App] PDF generation was cancelled or failed. No receipt was saved.');
         }
+    } catch(error) {
+        console.error('[App] An unexpected error occurred in handleGenerateAndSavePdf:', error);
+        alert('An unexpected error occurred while saving the receipt. Please check the console for details.');
+    } finally {
+        setIsLoading(false);
     }
   };
   
   const handleRedownload = async (receipt: DonationData) => {
     setIsLoading(true);
-    const pdfFile = await generatePdf(receipt);
-    setIsLoading(false);
+    try {
+        const pdfFile = await generatePdf(receipt);
 
-    if (pdfFile) {
-      const url = URL.createObjectURL(pdfFile);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = pdfFile.name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+        if (pdfFile) {
+          const url = URL.createObjectURL(pdfFile);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = pdfFile.name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          console.info(`[App] Re-downloaded PDF ${pdfFile.name}.`);
+        } else {
+            console.warn(`[App] Re-download for receipt ${receipt.receiptId} failed.`);
+        }
+    } catch (error) {
+        console.error(`[App] An unexpected error occurred while re-downloading receipt ${receipt.receiptId}:`, error);
+        alert('An unexpected error occurred while re-downloading the receipt.');
+    } finally {
+        setIsLoading(false);
     }
   };
   

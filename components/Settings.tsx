@@ -46,11 +46,18 @@ const Settings: React.FC<SettingsProps> = ({ orgData, onOrgDataChange, t }) => {
             throw new Error("Invalid config file format. Required keys are: name, address, ein.");
           }
         } catch (error) {
-          console.error("Error parsing config file:", error);
+          console.error("[Settings] Error parsing config file:", {
+            fileName: file.name,
+            error: error instanceof Error ? error.message : String(error)
+          });
           alert(`${t('configLoadError')} ${error instanceof Error ? error.message : ''}`);
           setSaveStatus('error');
           setTimeout(() => setSaveStatus('idle'), 3000);
         }
+      };
+      reader.onerror = (error) => {
+        console.error('[Settings] FileReader error:', error);
+        alert('Failed to read the selected file.');
       };
       reader.readAsText(file);
     }

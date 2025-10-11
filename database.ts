@@ -14,105 +14,77 @@ const INDEXEDDB_NAME = 'sqljs-database';
  */
 export const initDB = async () => {
   if (dbInstance) {
-    console.log("[DB] DB instance already exists. Skipping initialization.");
+    console.info('[DB] Database already initialized.');
     return;
   }
-  
-  console.log("[DB] Starting database initialization...");
 
   try {
+    console.info('[DB] Initializing SQL.js...');
     SQL = await initSqlJs({
-      locateFile: file => {
-        // The file is sql-wasm.wasm. The vite dev server should serve it from the root.
-        // For production builds, it needs to be in the `dist` folder.
-        // Putting it in `/public` is the easiest way to ensure this.
-        const url = `./${file}`;
-        console.log(`[DB] SQL.js locateFile: looking for "${file}"`);
-        console.log(`[DB] SQL.js locateFile: resolved path is "${url}"`);
-        const fullUrl = new URL(url, window.location.href).href;
-        console.log(`[DB] SQL.js locateFile: full resolved URL is "${fullUrl}"`);
-        
-        // Let's try to pre-fetch to see if it exists and what the response is.
-        fetch(fullUrl).then(response => {
-            console.log(`[DB] Pre-fetch for ${fullUrl} status: ${response.status}`);
-            if (!response.ok) {
-                console.error(`[DB] Pre-fetch for Wasm file failed with status ${response.statusText}. The server might not be serving the file correctly.`);
-            }
-            // We don't need to consume the body, just check the response.
-        }).catch(err => {
-            console.error(`[DB] Pre-fetch for Wasm file failed with network error:`, err);
-        });
-
-        return url;
-      }
+      locateFile: file => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${file}`
     });
-    console.log("[DB] SQL.js library initialized successfully.");
+    console.info('[DB] SQL.js loaded successfully.');
 
     const dbFromIndexedDB = await loadDbFromIndexedDB();
     if (dbFromIndexedDB) {
-      console.log(`[DB] Database loaded from IndexedDB (${dbFromIndexedDB.byteLength} bytes).`);
+      console.info('[DB] Database found in IndexedDB. Loading...');
       dbInstance = new SQL.Database(dbFromIndexedDB);
     } else {
-      console.log("[DB] No existing database in IndexedDB. Creating a new one.");
+      console.info('[DB] No database found in IndexedDB. Creating a new one.');
       dbInstance = new SQL.Database();
       createTables();
-      await saveDbToIndexedDB(); // Save the initial empty DB
-      console.log("[DB] New database created and saved to IndexedDB.");
+      await saveDbToIndexedDB(); 
+      console.info('[DB] New empty database saved to IndexedDB.');
     }
 
-    // It's possible tables don't exist even if DB file does (e.g. from a failed init).
-    // Let's ensure tables exist.
-    console.log("[DB] Verifying/creating database tables...");
-    createTables();
+    createTables(); // Ensure tables exist regardless.
+    console.info('[DB] Table structure verified.');
 
     await migrateFromLocalStorage();
-    console.log("[DB] Database initialization finished.");
 
   } catch (err) {
     console.error("[DB] CRITICAL: Database initialization failed:", err);
-    if (err instanceof Error) {
-        console.error("[DB] Error name:", err.name);
-        console.error("[DB] Error message:", err.message);
-        console.error("[DB] Error stack:", err.stack);
-    }
-    // Re-throw the error so the calling function in App.tsx knows about the failure.
     throw err;
   }
 };
 
 const createTables = () => {
   if (!dbInstance) return;
-  const createDonorsTable = `
-    CREATE TABLE IF NOT EXISTS donors (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      address TEXT,
-      email TEXT,
-      phone TEXT
-    );
-  `;
-  const createReceiptsTable = `
-    CREATE TABLE IF NOT EXISTS receipts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      receipt_number TEXT NOT NULL UNIQUE,
-      donor_id INTEGER NOT NULL,
-      donation_date TEXT NOT NULL,
-      donation_amount REAL,
-      donation_type TEXT NOT NULL,
-      goods_description TEXT,
-      FOREIGN KEY (donor_id) REFERENCES donors (id)
-    );
-  `;
-  const createAppMetaTable = `
-    CREATE TABLE IF NOT EXISTS app_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT
-    );
-  `;
-  dbInstance.exec(createDonorsTable);
-  dbInstance.exec(createReceiptsTable);
-  dbInstance.exec(createAppMetaTable);
-  console.log("Tables created or already exist.");
+  try {
+    const createDonorsTable = `
+      CREATE TABLE IF NOT EXISTS donors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        address TEXT,
+        email TEXT,
+        phone TEXT
+      );
+    `;
+    const createReceiptsTable = `
+      CREATE TABLE IF NOT EXISTS receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        receipt_number TEXT NOT NULL UNIQUE,
+        donor_id INTEGER NOT NULL,
+        donation_date TEXT NOT NULL,
+        donation_amount REAL,
+        donation_type TEXT NOT NULL,
+        goods_description TEXT,
+        FOREIGN KEY (donor_id) REFERENCES donors (id)
+      );
+    `;
+    const createAppMetaTable = `
+      CREATE TABLE IF NOT EXISTS app_meta (
+          key TEXT PRIMARY KEY,
+          value TEXT
+      );
+    `;
+    dbInstance.exec(createDonorsTable);
+    dbInstance.exec(createReceiptsTable);
+    dbInstance.exec(createAppMetaTable);
+  } catch (error) {
+    console.error('[DB] Failed to create tables:', error);
+    throw error;
+  }
 };
 
 const saveDbToIndexedDB = async () => {
@@ -128,24 +100,25 @@ const saveDbToIndexedDB = async () => {
         store.put(data, 'db');
 
         transaction.oncomplete = () => {
+          console.info('[DB] Database saved successfully to IndexedDB.');
           db.close();
           resolve();
         };
 
         transaction.onerror = (event) => {
-          console.error("Error saving DB to IndexedDB", event);
+          console.error("[DB] Error during save transaction to IndexedDB:", event);
           db.close();
           reject(event);
         };
       } catch (e) {
-         console.error("Failed to start save transaction. Did the object store get created?", e);
+         console.error("[DB] Failed to start save transaction. Object store might not exist.", e);
          db.close();
          reject(e);
       }
     };
     
     request.onerror = (event) => {
-        console.error("Error opening IndexedDB for saving", event);
+        console.error("[DB] Error opening IndexedDB for saving:", event);
         reject(event);
     };
   });
@@ -155,22 +128,19 @@ const loadDbFromIndexedDB = async (): Promise<Uint8Array | null> => {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(INDEXEDDB_NAME);
         
-        // This is the single source of truth for schema creation.
         request.onupgradeneeded = () => {
+            console.info('[DB] IndexedDB upgrade needed. Creating object store.');
             const db = request.result;
             if (!db.objectStoreNames.contains(DB_NAME)) {
                 db.createObjectStore(DB_NAME);
-                console.log("Created IndexedDB object store:", DB_NAME);
             }
         };
 
         request.onsuccess = () => {
             const db = request.result;
             
-            // onupgradeneeded's transaction is complete by the time onsuccess fires.
             if (!db.objectStoreNames.contains(DB_NAME)) {
-                 // This should not happen if onupgradeneeded worked correctly.
-                 console.error("IndexedDB object store not found after open.");
+                 console.warn("[DB] IndexedDB object store not found after open. This can happen on first run.");
                  db.close();
                  resolve(null);
                  return;
@@ -185,19 +155,18 @@ const loadDbFromIndexedDB = async (): Promise<Uint8Array | null> => {
             };
 
             getRequest.onsuccess = () => {
-                // getRequest.result is undefined if the 'db' key doesn't exist yet.
                 resolve((getRequest.result as Uint8Array) || null);
             };
 
             getRequest.onerror = (event) => {
-                console.error("Failed to read from IndexedDB", event);
+                console.error("[DB] Failed to read from IndexedDB store:", event);
                 db.close();
                 reject(event);
             };
         };
 
         request.onerror = (event) => {
-            console.error("Failed to open IndexedDB", event);
+            console.error("[DB] Failed to open IndexedDB:", event);
             reject(event);
         };
     });
@@ -212,8 +181,8 @@ const migrateFromLocalStorage = async () => {
     if (migrationDone || !dbInstance) {
         return;
     }
+    console.info('[DB] Starting one-time migration from localStorage...');
 
-    console.log("Starting data migration from localStorage...");
     let migrationOccurred = false;
 
     // 1. Migrate old receipts
@@ -222,15 +191,14 @@ const migrateFromLocalStorage = async () => {
         try {
             const oldReceipts: DonationData[] = JSON.parse(oldReceiptsJson);
             if (oldReceipts.length > 0) {
+                console.info(`[DB] Migrating ${oldReceipts.length} receipts from localStorage.`);
                 migrationOccurred = true;
-                console.log(`Migrating ${oldReceipts.length} receipts...`);
                 for (const receipt of oldReceipts) {
                     await addReceipt(receipt, false); // Add without saving each time
                 }
-                // localStorage.removeItem('donationReceipts');
             }
         } catch (error) {
-            console.error("Error migrating receipts:", error);
+            console.error("[DB] Error migrating receipts from localStorage:", error);
         }
     }
 
@@ -240,26 +208,26 @@ const migrateFromLocalStorage = async () => {
         try {
             const parsedOrgData = JSON.parse(oldOrgData);
             if (parsedOrgData.name) {
+                console.info('[DB] Migrating org data from localStorage.');
                 migrationOccurred = true;
-                console.log("Migrating organization data...");
                 await saveOrgData(parsedOrgData, false);
-                // localStorage.removeItem('orgData');
             }
-        } catch(e) { console.error("Error migrating org data", e); }
+        } catch(e) { console.error("[DB] Error migrating org data from localStorage", e); }
     }
     
     // 3. Migrate receipt counter
     const lastReceiptNumber = localStorage.getItem('donationReceiptCounter');
     if (lastReceiptNumber) {
+        console.info('[DB] Migrating receipt counter from localStorage.');
         migrationOccurred = true;
-        console.log("Migrating receipt counter...");
         setMeta('last_receipt_number', lastReceiptNumber);
-        // localStorage.removeItem('donationReceiptCounter');
     }
 
     if (migrationOccurred) {
-        await saveDbToIndexedDB(); // Save once at the end of all migrations
-        console.log("Migration complete!");
+        await saveDbToIndexedDB();
+        console.info('[DB] Migration complete. Database saved.');
+    } else {
+        console.info('[DB] No data found in localStorage to migrate.');
     }
 
     localStorage.setItem('db_migration_v2_complete', 'true');
@@ -271,41 +239,45 @@ const migrateFromLocalStorage = async () => {
  * @returns The donor's ID.
  */
 const findOrCreateDonor = (donor: { donorName: string; donorAddress: string; donorEmail: string; donorPhone: string; }): number => {
-  const selectStmt = dbInstance.prepare("SELECT * FROM donors WHERE name = :name");
-  selectStmt.bind({ ':name': donor.donorName });
+  try {
+    const selectStmt = dbInstance.prepare("SELECT * FROM donors WHERE name = :name");
+    selectStmt.bind({ ':name': donor.donorName });
 
-  if (selectStmt.step()) {
-    const existingDonor = selectStmt.getAsObject();
+    if (selectStmt.step()) {
+        const existingDonor = selectStmt.getAsObject();
+        selectStmt.free();
+        
+        const updateStmt = dbInstance.prepare(`
+            UPDATE donors 
+            SET address = :address, email = :email, phone = :phone 
+            WHERE id = :id
+        `);
+        updateStmt.run({
+            ':address': donor.donorAddress || existingDonor.address,
+            ':email': donor.donorEmail || existingDonor.email,
+            ':phone': donor.donorPhone || existingDonor.phone,
+            ':id': existingDonor.id
+        });
+        updateStmt.free();
+        
+        return existingDonor.id;
+    }
     selectStmt.free();
-    
-    // Always update with the latest info from the form, assuming it's the most current.
-    const updateStmt = dbInstance.prepare(`
-        UPDATE donors 
-        SET address = :address, email = :email, phone = :phone 
-        WHERE id = :id
-    `);
-    updateStmt.run({
-        ':address': donor.donorAddress || existingDonor.address,
-        ':email': donor.donorEmail || existingDonor.email,
-        ':phone': donor.donorPhone || existingDonor.phone,
-        ':id': existingDonor.id
+
+    const insertStmt = dbInstance.prepare("INSERT INTO donors (name, address, email, phone) VALUES (:name, :address, :email, :phone)");
+    insertStmt.run({
+        ':name': donor.donorName,
+        ':address': donor.donorAddress,
+        ':email': donor.donorEmail,
+        ':phone': donor.donorPhone
     });
-    updateStmt.free();
-    
-    return existingDonor.id;
+    insertStmt.free();
+
+    return dbInstance.exec("SELECT last_insert_rowid()")[0].values[0][0];
+  } catch (error) {
+    console.error('[DB] Error in findOrCreateDonor:', error);
+    throw error;
   }
-  selectStmt.free();
-
-  const insertStmt = dbInstance.prepare("INSERT INTO donors (name, address, email, phone) VALUES (:name, :address, :email, :phone)");
-  insertStmt.run({
-    ':name': donor.donorName,
-    ':address': donor.donorAddress,
-    ':email': donor.donorEmail,
-    ':phone': donor.donorPhone
-  });
-  insertStmt.free();
-
-  return dbInstance.exec("SELECT last_insert_rowid()")[0].values[0][0];
 };
 
 /**
@@ -313,26 +285,33 @@ const findOrCreateDonor = (donor: { donorName: string; donorAddress: string; don
  */
 export const addReceipt = async (receiptData: DonationData, shouldSave: boolean = true) => {
   if (!dbInstance) throw new Error("Database not initialized.");
-
-  const donorId = findOrCreateDonor(receiptData);
-
-  const insertStmt = dbInstance.prepare(`
-    INSERT INTO receipts (receipt_number, donor_id, donation_date, donation_amount, donation_type, goods_description)
-    VALUES (:receipt_number, :donor_id, :donation_date, :donation_amount, :donation_type, :goods_description)
-  `);
   
-  insertStmt.run({
-    ':receipt_number': receiptData.receiptId,
-    ':donor_id': donorId,
-    ':donation_date': receiptData.donationDate,
-    ':donation_amount': receiptData.donationType === 'Cash' ? parseFloat(String(receiptData.donationAmount)) || 0 : null,
-    ':donation_type': receiptData.donationType,
-    ':goods_description': receiptData.donationType === 'Goods' ? receiptData.goodsDescription : null
-  });
+  try {
+    const donorId = findOrCreateDonor(receiptData);
 
-  insertStmt.free();
-  if (shouldSave) {
-    await saveDbToIndexedDB();
+    const insertStmt = dbInstance.prepare(`
+        INSERT OR REPLACE INTO receipts (receipt_number, donor_id, donation_date, donation_amount, donation_type, goods_description)
+        VALUES (:receipt_number, :donor_id, :donation_date, :donation_amount, :donation_type, :goods_description)
+    `);
+    
+    insertStmt.run({
+        ':receipt_number': receiptData.receiptId,
+        ':donor_id': donorId,
+        ':donation_date': receiptData.donationDate,
+        ':donation_amount': receiptData.donationType === 'Cash' ? parseFloat(String(receiptData.donationAmount)) || 0 : null,
+        ':donation_type': receiptData.donationType,
+        ':goods_description': receiptData.donationType === 'Goods' ? receiptData.goodsDescription : null
+    });
+
+    insertStmt.free();
+    console.info(`[DB] Receipt ${receiptData.receiptId} added to transaction.`);
+
+    if (shouldSave) {
+        await saveDbToIndexedDB();
+    }
+  } catch (error) {
+    console.error(`[DB] Failed to add receipt ${receiptData.receiptId}:`, error);
+    throw error;
   }
 };
 
@@ -342,16 +321,20 @@ export const addReceipt = async (receiptData: DonationData, shouldSave: boolean 
  */
 export const getDonorsForAutocomplete = (query: string): Donor[] => {
   if (!dbInstance || !query) return [];
+  try {
+    const stmt = dbInstance.prepare("SELECT * FROM donors WHERE name LIKE :query ORDER BY name LIMIT 10");
+    stmt.bind({ ':query': `%${query}%` });
 
-  const stmt = dbInstance.prepare("SELECT * FROM donors WHERE name LIKE :query ORDER BY name LIMIT 10");
-  stmt.bind({ ':query': `%${query}%` });
-
-  const donors: Donor[] = [];
-  while (stmt.step()) {
-    donors.push(stmt.getAsObject() as Donor);
+    const donors: Donor[] = [];
+    while (stmt.step()) {
+        donors.push(stmt.getAsObject() as Donor);
+    }
+    stmt.free();
+    return donors;
+  } catch (error) {
+    console.error('[DB] Failed to get donors for autocomplete:', error);
+    return [];
   }
-  stmt.free();
-  return donors;
 };
 
 
@@ -360,84 +343,97 @@ export const getDonorsForAutocomplete = (query: string): Donor[] => {
  */
 export const getReceipts = (filters: any): DonationData[] => {
     if (!dbInstance) return [];
+    
+    try {
+        let query = `
+        SELECT
+            r.receipt_number as receiptId,
+            d.name as donorName,
+            d.address as donorAddress,
+            d.email as donorEmail,
+            d.phone as donorPhone,
+            r.donation_date as donationDate,
+            r.donation_amount as donationAmount,
+            r.donation_type as donationType,
+            r.goods_description as goodsDescription
+        FROM receipts r
+        JOIN donors d ON r.donor_id = d.id
+        `;
+        
+        const whereClauses = [];
+        const params: { [key: string]: any } = {};
 
-    let query = `
-      SELECT
-        r.receipt_number as receiptId,
-        d.name as donorName,
-        d.address as donorAddress,
-        d.email as donorEmail,
-        d.phone as donorPhone,
-        r.donation_date as donationDate,
-        r.donation_amount as donationAmount,
-        r.donation_type as donationType,
-        r.goods_description as goodsDescription
-      FROM receipts r
-      JOIN donors d ON r.donor_id = d.id
-    `;
-    
-    const whereClauses = [];
-    const params: { [key: string]: any } = {};
+        if (filters.searchTerm) {
+            whereClauses.push("d.name LIKE :searchTerm");
+            params[':searchTerm'] = `%${filters.searchTerm}%`;
+        }
+        if (filters.startDate) {
+            whereClauses.push("r.donation_date >= :startDate");
+            params[':startDate'] = filters.startDate;
+        }
+        if (filters.endDate) {
+            whereClauses.push("r.donation_date <= :endDate");
+            params[':endDate'] = filters.endDate;
+        }
+        if (filters.minAmount) {
+            whereClauses.push("r.donation_amount >= :minAmount");
+            params[':minAmount'] = parseFloat(filters.minAmount);
+        }
+        if (filters.maxAmount) {
+            whereClauses.push("r.donation_amount <= :maxAmount");
+            params[':maxAmount'] = parseFloat(filters.maxAmount);
+        }
 
-    if (filters.searchTerm) {
-        whereClauses.push("d.name LIKE :searchTerm");
-        params[':searchTerm'] = `%${filters.searchTerm}%`;
+        if (whereClauses.length > 0) {
+            query += " WHERE " + whereClauses.join(" AND ");
+        }
+        
+        query += " ORDER BY r.donation_date DESC, r.id DESC";
+        
+        const stmt = dbInstance.prepare(query);
+        stmt.bind(params);
+        
+        const receipts: DonationData[] = [];
+        while (stmt.step()) {
+            const row = stmt.getAsObject();
+            receipts.push({
+                ...row,
+                donationAmount: row.donationType === 'Cash' ? (row.donationAmount || 0) : '',
+                goodsDescription: row.donationType === 'Goods' ? (row.goodsDescription || '') : ''
+            } as DonationData);
+        }
+        stmt.free();
+        return receipts;
+    } catch(error) {
+        console.error('[DB] Failed to get receipts:', error);
+        return [];
     }
-    if (filters.startDate) {
-        whereClauses.push("r.donation_date >= :startDate");
-        params[':startDate'] = filters.startDate;
-    }
-    if (filters.endDate) {
-        whereClauses.push("r.donation_date <= :endDate");
-        params[':endDate'] = filters.endDate;
-    }
-     if (filters.minAmount) {
-        whereClauses.push("r.donation_amount >= :minAmount");
-        params[':minAmount'] = parseFloat(filters.minAmount);
-    }
-    if (filters.maxAmount) {
-        whereClauses.push("r.donation_amount <= :maxAmount");
-        params[':maxAmount'] = parseFloat(filters.maxAmount);
-    }
-
-    if (whereClauses.length > 0) {
-        query += " WHERE " + whereClauses.join(" AND ");
-    }
-    
-    query += " ORDER BY r.donation_date DESC, r.id DESC";
-    
-    const stmt = dbInstance.prepare(query);
-    stmt.bind(params);
-    
-    const receipts: DonationData[] = [];
-    while (stmt.step()) {
-        const row = stmt.getAsObject();
-        // Ensure amount is a number for 'Cash' donations, and description is a string for 'Goods'
-        receipts.push({
-            ...row,
-            donationAmount: row.donationType === 'Cash' ? (row.donationAmount || 0) : '',
-            goodsDescription: row.donationType === 'Goods' ? (row.goodsDescription || '') : ''
-        } as DonationData);
-    }
-    stmt.free();
-    return receipts;
 };
 
 // --- Meta Data Management ---
 const getMeta = (key: string): string | null => {
     if (!dbInstance) return null;
-    const stmt = dbInstance.prepare("SELECT value FROM app_meta WHERE key = ?");
-    stmt.bind([key]);
-    const result = stmt.step() ? stmt.get()[0] : null;
-    stmt.free();
-    return result;
+    try {
+        const stmt = dbInstance.prepare("SELECT value FROM app_meta WHERE key = ?");
+        stmt.bind([key]);
+        const result = stmt.step() ? stmt.get()[0] : null;
+        stmt.free();
+        return result;
+    } catch (error) {
+        console.error(`[DB] Failed to get meta key "${key}":`, error);
+        return null;
+    }
 }
 
 const setMeta = (key: string, value: string) => {
     if (!dbInstance) return;
-    const stmt = dbInstance.prepare("INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)");
-    stmt.run([key, value]);
-    stmt.free();
+    try {
+        const stmt = dbInstance.prepare("INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)");
+        stmt.run([key, value]);
+        stmt.free();
+    } catch (error) {
+        console.error(`[DB] Failed to set meta key "${key}":`, error);
+    }
 }
 
 export const getNextReceiptIdString = async (): Promise<string> => {
@@ -447,17 +443,20 @@ export const getNextReceiptIdString = async (): Promise<string> => {
     const lastReceiptNumber = parseInt(lastReceiptNumberStr || '1000', 10);
     const nextReceiptNumber = lastReceiptNumber + 1;
     
-    // This function now only calculates. Saving the number happens when the receipt is saved.
     return `RCPT-${String(nextReceiptNumber).padStart(4, '0')}`;
 };
 
 export const saveLastReceiptNumber = (receiptId: string) => {
     if (!dbInstance) return;
-    if (receiptId.startsWith('RCPT-')) {
-        const usedReceiptNumber = parseInt(receiptId.split('-')[1], 10);
-        if (!isNaN(usedReceiptNumber)) {
-            setMeta('last_receipt_number', String(usedReceiptNumber));
+    try {
+        if (receiptId.startsWith('RCPT-')) {
+            const usedReceiptNumber = parseInt(receiptId.split('-')[1], 10);
+            if (!isNaN(usedReceiptNumber)) {
+                setMeta('last_receipt_number', String(usedReceiptNumber));
+            }
         }
+    } catch (error) {
+        console.error('[DB] Failed to save last receipt number:', error);
     }
 }
 
@@ -474,6 +473,7 @@ export const getOrgData = async (): Promise<OrgData> => {
         try {
             return JSON.parse(orgDataJson);
         } catch (e) {
+            console.error('[DB] Failed to parse org_data from database. Returning default.', e);
             return defaultOrgData;
         }
     }
@@ -482,8 +482,13 @@ export const getOrgData = async (): Promise<OrgData> => {
 
 export const saveOrgData = async (orgData: OrgData, shouldSave: boolean = true) => {
     if (!dbInstance) return;
-    setMeta('org_data', JSON.stringify(orgData));
-    if (shouldSave) {
-        await saveDbToIndexedDB();
+    try {
+        setMeta('org_data', JSON.stringify(orgData));
+        if (shouldSave) {
+            await saveDbToIndexedDB();
+        }
+    } catch (error) {
+        console.error('[DB] Failed to save org data:', error);
+        throw error; // Re-throw to notify the caller
     }
 }
