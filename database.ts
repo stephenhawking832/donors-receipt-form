@@ -21,7 +21,7 @@ export const initDB = async () => {
   try {
     console.info('[DB] Initializing SQL.js...');
     SQL = await initSqlJs({
-      locateFile: file => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${file}`
+      locateFile: file => `https://aistudiocdn.com/sql.js@1.10.3/dist/${file}`
     });
     console.info('[DB] SQL.js loaded successfully.');
 
