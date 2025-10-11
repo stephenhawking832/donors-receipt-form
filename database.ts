@@ -20,9 +20,9 @@ export const initDB = async () => {
 
   try {
     console.info('[DB] Initializing SQL.js...');
-    // Switched to an ESM-compatible CDN (esm.sh) to resolve module import errors.
-    // The previous CDN provided a file that wasn't a standard ES module.
-    const wasmURL = 'https://esm.sh/sql.js@1.10.3/dist/sql-wasm.wasm';
+    // Switched to jsdelivr to load the official ES Module build (`sql-esm.js`)
+    // and its corresponding wasm file. This ensures maximum compatibility.
+    const wasmURL = 'https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.wasm';
     console.info(`[DB] Fetching WASM binary from ${wasmURL}...`);
     
     const response = await fetch(wasmURL);
