@@ -6,6 +6,7 @@ let dbInstance: any | null = null;
 let SQL: any | null = null;
 
 const DB_NAME = 'donations.sqlite';
+const INDEXEDDB_NAME = 'sqljs-database';
 
 /**
  * Initializes the SQLite database, creating it from IndexedDB if it exists,
@@ -19,10 +20,10 @@ export const initDB = async () => {
       locateFile: file => `./${file}`
     });
 
-    const dbFromLocalStorage = await loadDbFromIndexedDB();
-    if (dbFromLocalStorage) {
+    const dbFromIndexedDB = await loadDbFromIndexedDB();
+    if (dbFromIndexedDB) {
       console.log("Database loaded from IndexedDB.");
-      dbInstance = new SQL.Database(dbFromLocalStorage);
+      dbInstance = new SQL.Database(dbFromIndexedDB);
     } else {
       console.log("Creating a new database.");
       dbInstance = new SQL.Database();
@@ -75,28 +76,34 @@ const createTables = () => {
 const saveDbToIndexedDB = async () => {
   if (!dbInstance) return;
   return new Promise<void>((resolve, reject) => {
-    const request = indexedDB.open('sqljs-database');
+    const request = indexedDB.open(INDEXEDDB_NAME);
     request.onsuccess = () => {
       const db = request.result;
-      const transaction = db.transaction(DB_NAME, 'readwrite');
-      const store = transaction.objectStore(DB_NAME);
-      const data = dbInstance.export();
-      store.put(data, 'db');
-      transaction.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-      transaction.onerror = (event) => {
-        console.error("Error saving DB to IndexedDB", event);
-        reject(event);
-      };
+      try {
+        const transaction = db.transaction(DB_NAME, 'readwrite');
+        const store = transaction.objectStore(DB_NAME);
+        const data = dbInstance.export();
+        store.put(data, 'db');
+
+        transaction.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+
+        transaction.onerror = (event) => {
+          console.error("Error saving DB to IndexedDB", event);
+          db.close();
+          reject(event);
+        };
+      } catch (e) {
+         console.error("Failed to start save transaction. Did the object store get created?", e);
+         db.close();
+         reject(e);
+      }
     };
-    request.onupgradeneeded = () => {
-        const db = request.result;
-        db.createObjectStore(DB_NAME);
-    };
+    
     request.onerror = (event) => {
-        console.error("Error opening IndexedDB", event);
+        console.error("Error opening IndexedDB for saving", event);
         reject(event);
     };
   });
@@ -104,29 +111,53 @@ const saveDbToIndexedDB = async () => {
 
 const loadDbFromIndexedDB = async (): Promise<Uint8Array | null> => {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('sqljs-database');
-        request.onsuccess = () => {
+        const request = indexedDB.open(INDEXEDDB_NAME);
+        
+        // This is the single source of truth for schema creation.
+        request.onupgradeneeded = () => {
             const db = request.result;
             if (!db.objectStoreNames.contains(DB_NAME)) {
-                db.close();
-                resolve(null);
-                return;
+                db.createObjectStore(DB_NAME);
+                console.log("Created IndexedDB object store:", DB_NAME);
             }
+        };
+
+        request.onsuccess = () => {
+            const db = request.result;
+            
+            // onupgradeneeded's transaction is complete by the time onsuccess fires.
+            if (!db.objectStoreNames.contains(DB_NAME)) {
+                 // This should not happen if onupgradeneeded worked correctly.
+                 console.error("IndexedDB object store not found after open.");
+                 db.close();
+                 resolve(null);
+                 return;
+            }
+
             const transaction = db.transaction(DB_NAME, 'readonly');
             const store = transaction.objectStore(DB_NAME);
             const getRequest = store.get('db');
-            getRequest.onsuccess = () => {
-                resolve(getRequest.result as Uint8Array | null);
+            
+            transaction.oncomplete = () => {
+                db.close();
             };
-            getRequest.onerror = (event) => reject(event);
 
-            transaction.oncomplete = () => db.close();
+            getRequest.onsuccess = () => {
+                // getRequest.result is undefined if the 'db' key doesn't exist yet.
+                resolve((getRequest.result as Uint8Array) || null);
+            };
+
+            getRequest.onerror = (event) => {
+                console.error("Failed to read from IndexedDB", event);
+                db.close();
+                reject(event);
+            };
         };
-        request.onupgradeneeded = () => {
-            request.result.createObjectStore(DB_NAME);
-            resolve(null); // No data yet
+
+        request.onerror = (event) => {
+            console.error("Failed to open IndexedDB", event);
+            reject(event);
         };
-        request.onerror = (event) => reject(event);
     });
 }
 
