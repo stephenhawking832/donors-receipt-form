@@ -175,18 +175,33 @@ const App: React.FC = () => {
     };
     
     setIsDbLoading(true);
-    await db.initDB();
+    try {
+        console.log("[App] Attempting to initialize database...");
+        await db.initDB();
+        console.log("[App] Database initialization successful.");
 
-    const storedOrgData = await db.getOrgData();
-    setOrgData(storedOrgData);
-    
-    const initialHistory = db.getReceipts({});
-    setReceiptHistory(initialHistory);
+        console.log("[App] Loading organization data...");
+        const storedOrgData = await db.getOrgData();
+        setOrgData(storedOrgData);
+        console.log("[App] Organization data loaded.");
+        
+        console.log("[App] Loading receipt history...");
+        const initialHistory = db.getReceipts({});
+        setReceiptHistory(initialHistory);
+        console.log(`[App] Receipt history loaded with ${initialHistory.length} items.`);
 
-    const nextReceiptId = await db.getNextReceiptIdString();
-    setFormData(prev => ({...prev, receiptId: nextReceiptId}));
+        console.log("[App] Calculating next receipt ID...");
+        const nextReceiptId = await db.getNextReceiptIdString();
+        setFormData(prev => ({...prev, receiptId: nextReceiptId}));
+        console.log(`[App] Next receipt ID is ${nextReceiptId}.`);
 
-    setIsDbLoading(false);
+    } catch (error) {
+        console.error("[App] A critical error occurred during application startup in loadInitialData.", error);
+        // The user can see the detailed error in the console.
+    } finally {
+        setIsDbLoading(false);
+        console.log("[App] loadInitialData finished.");
+    }
   }, []);
 
   useEffect(() => {

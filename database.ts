@@ -13,28 +13,70 @@ const INDEXEDDB_NAME = 'sqljs-database';
  * or creating a new one otherwise. Also creates the necessary tables.
  */
 export const initDB = async () => {
-  if (dbInstance) return;
+  if (dbInstance) {
+    console.log("[DB] DB instance already exists. Skipping initialization.");
+    return;
+  }
+  
+  console.log("[DB] Starting database initialization...");
 
   try {
     SQL = await initSqlJs({
-      locateFile: file => `./${file}`
+      locateFile: file => {
+        // The file is sql-wasm.wasm. The vite dev server should serve it from the root.
+        // For production builds, it needs to be in the `dist` folder.
+        // Putting it in `/public` is the easiest way to ensure this.
+        const url = `./${file}`;
+        console.log(`[DB] SQL.js locateFile: looking for "${file}"`);
+        console.log(`[DB] SQL.js locateFile: resolved path is "${url}"`);
+        const fullUrl = new URL(url, window.location.href).href;
+        console.log(`[DB] SQL.js locateFile: full resolved URL is "${fullUrl}"`);
+        
+        // Let's try to pre-fetch to see if it exists and what the response is.
+        fetch(fullUrl).then(response => {
+            console.log(`[DB] Pre-fetch for ${fullUrl} status: ${response.status}`);
+            if (!response.ok) {
+                console.error(`[DB] Pre-fetch for Wasm file failed with status ${response.statusText}. The server might not be serving the file correctly.`);
+            }
+            // We don't need to consume the body, just check the response.
+        }).catch(err => {
+            console.error(`[DB] Pre-fetch for Wasm file failed with network error:`, err);
+        });
+
+        return url;
+      }
     });
+    console.log("[DB] SQL.js library initialized successfully.");
 
     const dbFromIndexedDB = await loadDbFromIndexedDB();
     if (dbFromIndexedDB) {
-      console.log("Database loaded from IndexedDB.");
+      console.log(`[DB] Database loaded from IndexedDB (${dbFromIndexedDB.byteLength} bytes).`);
       dbInstance = new SQL.Database(dbFromIndexedDB);
     } else {
-      console.log("Creating a new database.");
+      console.log("[DB] No existing database in IndexedDB. Creating a new one.");
       dbInstance = new SQL.Database();
       createTables();
       await saveDbToIndexedDB(); // Save the initial empty DB
+      console.log("[DB] New database created and saved to IndexedDB.");
     }
 
+    // It's possible tables don't exist even if DB file does (e.g. from a failed init).
+    // Let's ensure tables exist.
+    console.log("[DB] Verifying/creating database tables...");
+    createTables();
+
     await migrateFromLocalStorage();
+    console.log("[DB] Database initialization finished.");
 
   } catch (err) {
-    console.error("Database initialization failed:", err);
+    console.error("[DB] CRITICAL: Database initialization failed:", err);
+    if (err instanceof Error) {
+        console.error("[DB] Error name:", err.name);
+        console.error("[DB] Error message:", err.message);
+        console.error("[DB] Error stack:", err.stack);
+    }
+    // Re-throw the error so the calling function in App.tsx knows about the failure.
+    throw err;
   }
 };
 
