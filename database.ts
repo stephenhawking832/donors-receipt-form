@@ -20,10 +20,22 @@ export const initDB = async () => {
 
   try {
     console.info('[DB] Initializing SQL.js...');
-    SQL = await initSqlJs({
-      locateFile: file => `https://aistudiocdn.com/sql.js@1.10.3/dist/${file}`
-    });
-    console.info('[DB] SQL.js loaded successfully.');
+    // Manually fetch the wasm file to avoid issues with PWA/service worker loading.
+    const wasmURL = 'https://aistudiocdn.com/sql.js@1.10.3/dist/sql-wasm.wasm';
+    console.info(`[DB] Fetching WASM binary from ${wasmURL}...`);
+    const wasmBinary = await fetch(wasmURL)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`[DB] Failed to fetch WASM: ${response.status} ${response.statusText}`);
+            }
+            console.info('[DB] WASM response OK. Reading as ArrayBuffer...');
+            return response.arrayBuffer();
+        });
+    console.info('[DB] WASM binary fetched successfully.');
+
+    SQL = await initSqlJs({ wasmBinary });
+    console.info('[DB] SQL.js loaded and initialized successfully with manual WASM binary.');
+
 
     const dbFromIndexedDB = await loadDbFromIndexedDB();
     if (dbFromIndexedDB) {
@@ -44,6 +56,9 @@ export const initDB = async () => {
 
   } catch (err) {
     console.error("[DB] CRITICAL: Database initialization failed:", err);
+    if (err instanceof Error) {
+        console.error(`[DB] Error Details: Name: ${err.name}, Message: ${err.message}`);
+    }
     throw err;
   }
 };
