@@ -20,21 +20,26 @@ export const initDB = async () => {
 
   try {
     console.info('[DB] Initializing SQL.js...');
-    // Manually fetch the wasm file to avoid issues with PWA/service worker loading.
-    const wasmURL = 'https://aistudiocdn.com/sql.js@1.10.3/dist/sql-wasm.wasm';
+    // Switched to an ESM-compatible CDN (esm.sh) to resolve module import errors.
+    // The previous CDN provided a file that wasn't a standard ES module.
+    const wasmURL = 'https://esm.sh/sql.js@1.10.3/dist/sql-wasm.wasm';
     console.info(`[DB] Fetching WASM binary from ${wasmURL}...`);
-    const wasmBinary = await fetch(wasmURL)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`[DB] Failed to fetch WASM: ${response.status} ${response.statusText}`);
-            }
-            console.info('[DB] WASM response OK. Reading as ArrayBuffer...');
-            return response.arrayBuffer();
-        });
-    console.info('[DB] WASM binary fetched successfully.');
-
+    
+    const response = await fetch(wasmURL);
+    if (!response.ok) {
+      throw new Error(`[DB] Failed to fetch WASM: ${response.status} ${response.statusText}`);
+    }
+    console.info('[DB] WASM response OK. Reading as ArrayBuffer...');
+    const wasmBinary = await response.arrayBuffer();
+    
+    console.info(`[DB] WASM binary fetched successfully. Size: ${wasmBinary.byteLength} bytes.`);
+    if (wasmBinary.byteLength === 0) {
+        throw new Error('[DB] Fetched WASM binary is empty.');
+    }
+    
+    console.info('[DB] Calling initSqlJs with the fetched WASM binary...');
     SQL = await initSqlJs({ wasmBinary });
-    console.info('[DB] SQL.js loaded and initialized successfully with manual WASM binary.');
+    console.info('[DB] SQL.js loaded and initialized successfully.');
 
 
     const dbFromIndexedDB = await loadDbFromIndexedDB();
