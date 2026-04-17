@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
             ]
           },
           workbox: {
-            globPatterns: ['**/*.{js,css,html,svg,ico,wasm}'],
+            globPatterns: ['**/*.{js,css,html,svg,ico}'],
           },
           devOptions: {
             enabled: true

@@ -167,14 +167,6 @@ const App: React.FC = () => {
   
   const loadInitialData = useCallback(async () => {
     console.info('[App] Starting initial data load...');
-    if (!isPwaMode) {
-      console.info('[App] Not in PWA mode. Using default data.');
-      setIsDbLoading(false);
-      const defaultOrgData = { name: "Generous Hearts Foundation", address: "123 Charity Lane, Philanthropy, TX 78701", ein: "12-3456789" };
-      setOrgData(defaultOrgData);
-      setFormData(prev => ({...prev, receiptId: 'RCPT-1001'}));
-      return;
-    };
     
     setIsDbLoading(true);
     try {
@@ -199,6 +191,7 @@ const App: React.FC = () => {
 
     } catch (error) {
         console.error("[App] A critical error occurred during application startup:", error);
+        // Using a non-blocking way to show error if possible, but keeping alerts as they were
         alert("Failed to initialize the application database. Some features might be unavailable. Please check the console for details.");
     } finally {
         setIsDbLoading(false);
@@ -230,14 +223,12 @@ const App: React.FC = () => {
 
   const handleOrgDataChange = async (newOrgData: OrgData) => {
     setOrgData(newOrgData);
-    if (isPwaMode) {
-      try {
-        await db.saveOrgData(newOrgData);
-        console.info('[App] Organization data saved successfully.');
-      } catch (error) {
-        console.error('[App] Failed to save organization data:', error);
-        alert('Could not save organization settings to the database.');
-      }
+    try {
+      await db.saveOrgData(newOrgData);
+      console.info('[App] Organization data saved successfully.');
+    } catch (error) {
+      console.error('[App] Failed to save organization data:', error);
+      alert('Could not save organization settings to the database.');
     }
   };
 
@@ -255,7 +246,7 @@ const App: React.FC = () => {
       [name]: processedValue,
     }));
 
-    if (name === 'donorName' && isPwaMode) {
+    if (name === 'donorName') {
       if (value.trim() === '') {
         setDonorSuggestions([]);
         setIsDropdownVisible(false);
@@ -333,8 +324,8 @@ const App: React.FC = () => {
             URL.revokeObjectURL(url);
             console.info(`[App] PDF ${pdfFile.name} downloaded.`);
             
-            if (isPwaMode) {
-                console.info('[App] PWA Mode: Saving receipt to database...');
+            if (true) { // removed isPwaMode check
+                console.info('[App] Saving receipt to database...');
                 await db.addReceipt(formData);
                 db.saveLastReceiptNumber(formData.receiptId);
                 
@@ -506,7 +497,7 @@ const App: React.FC = () => {
               <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
                 <div className="relative" ref={autocompleteWrapperRef}>
                   <FormField label={t('donorNameLabel')} id="donorName" name="donorName" type="text" value={formData.donorName} onChange={handleChange} required autoComplete="off" />
-                  {isPwaMode && isDropdownVisible && donorSuggestions.length > 0 && (
+                  {isDropdownVisible && donorSuggestions.length > 0 && (
                     <ul className="absolute z-10 w-full bg-white border border-slate-300 rounded-md mt-1 max-h-60 overflow-y-auto shadow-lg" role="listbox">
                       {donorSuggestions.map((donor) => (
                         <li
@@ -551,7 +542,7 @@ const App: React.FC = () => {
                       {t('generatingButton')}
                     </>
                   ) : (
-                    t(isPwaMode ? 'generateButton' : 'downloadButton')
+                    t('generateButton')
                   )}
                 </button>
                 <SharePanel />
